@@ -5,8 +5,8 @@
 #include "ui.hpp"
 
 void initialize() {
-    drive::init();
-    ui::init();
+    initDrive();
+    initUI();
 }
 
 void disabled() {}
@@ -14,12 +14,12 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-    autons::run();
+    runAuton();
 }
 
 void opcontrol() {
     while (true) {
-        controls::driveControl();
+        driveControl();
         pros::delay(10);
     }
 }

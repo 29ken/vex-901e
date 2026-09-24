@@ -1,29 +1,22 @@
 #include "autons.hpp"
 #include "drivetrain.hpp"
 
-using drive::chassis;
+static void none() {}
 
-namespace autons {
-namespace {
-
-void none() {}
-
-void redLeft() {
+static void redLeft() {
     // chassis.setPose(-48, -60, 90);
     // chassis.moveToPoint(-24, -60, 2000);
 }
 
-void redRight() {}
+static void redRight() {}
 
-void blueLeft() {}
+static void blueLeft() {}
 
-void blueRight() {}
+static void blueRight() {}
 
-void skills() {}
+static void skills() {}
 
-} // namespace
-
-const Routine list[] = {
+const Auton autons[] = {
     {"None", none},
     {"Red Left", redLeft},
     {"Red Right", redRight},
@@ -31,12 +24,10 @@ const Routine list[] = {
     {"Blue Right", blueRight},
     {"Skills", skills},
 };
-const int count = sizeof(list) / sizeof(list[0]);
-int selected = 0;
+const int autonCount = sizeof(autons) / sizeof(autons[0]);
+int selectedAuton = 0;
 
-void run() {
-    chassis.setPose(0, 0, 0);  // routines can override this
-    list[selected].run();
+void runAuton() {
+    chassis.setPose(0, 0, 0);  // autons can override this
+    autons[selectedAuton].run();
 }
-
-} // namespace autons

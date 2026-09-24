@@ -1,17 +1,13 @@
 #pragma once
 
-namespace autons {
-
-struct Routine {
+struct Auton {
     const char* name;
     void (*run)();
 };
 
-extern const Routine list[];
-extern const int count;
-extern int selected;  // changed by the brain screen selector
+extern const Auton autons[];
+extern const int autonCount;
+extern int selectedAuton;  // changed by the brain screen selector
 
-// Runs whichever routine is selected. Called from autonomous().
-void run();
-
-} // namespace autons
+// Runs whichever auton is selected. Called from autonomous().
+void runAuton();
