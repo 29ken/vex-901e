@@ -2,7 +2,6 @@
 #include <cstdint>
 
 // Ports and tuning constants. Negative port = motor is reversed.
-namespace config {
 
 // Right drive
 inline constexpr std::int8_t RIGHT_11W_A = 1;
@@ -35,6 +34,4 @@ inline constexpr float TURN_RAMP_UP   = 7.0f;
 inline constexpr float TURN_RAMP_DOWN = 20.0f;
 
 // Left stick within ~17 degrees of horizontal counts as a pure spin.
-inline constexpr float SIDEWAYS_ZONE = 0.2f;
-
-} // namespace config
+inline constexpr float SIDEWAYS_ZONE = 0.3f;

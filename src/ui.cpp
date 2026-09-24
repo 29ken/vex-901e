@@ -8,13 +8,10 @@
 #include <cstdlib>
 #include <vector>
 
-namespace ui {
-namespace {
-
 // A motor that isn't plugged in reports a nonsense temperature.
-constexpr double TEMP_UNPLUGGED = 200.0;
+static constexpr double TEMP_UNPLUGGED = 200.0;
 
-void printSide(int line, const char* label, pros::MotorGroup& motors) {
+static void printSide(int line, const char* label, pros::MotorGroup& motors) {
     std::vector<double> temps = motors.get_temperature_all();
     std::vector<std::int8_t> ports = motors.get_port_all();
 
@@ -32,10 +29,10 @@ void printSide(int line, const char* label, pros::MotorGroup& motors) {
 }
 
 // Whatever drive motor is running hottest right now, for the controller screen.
-void hottestMotor(int& port, double& temp) {
+static void hottestMotor(int& port, double& temp) {
     port = 0;
     temp = 0;
-    for (pros::MotorGroup* group : {&drive::leftMotors, &drive::rightMotors}) {
+    for (pros::MotorGroup* group : {&leftMotors, &rightMotors}) {
         std::vector<double> temps = group->get_temperature_all();
         std::vector<std::int8_t> ports = group->get_port_all();
         for (std::size_t i = 0; i < temps.size(); i++) {
@@ -47,42 +44,42 @@ void hottestMotor(int& port, double& temp) {
     }
 }
 
-void drawBrain() {
-    pros::lcd::print(0, "Auton: %s  (%d/%d)", autons::list[autons::selected].name,
-                     autons::selected + 1, autons::count);
+static void drawBrain() {
+    pros::lcd::print(0, "Auton: %s  (%d/%d)", autons[selectedAuton].name,
+                     selectedAuton + 1, autonCount);
     pros::lcd::print(1, "left / right buttons to change");
 
-    if (!config::BRAIN_UI) return;
+    if (!BRAIN_UI) return;
 
-    printSide(3, "L", drive::leftMotors);
-    printSide(4, "R", drive::rightMotors);
+    printSide(3, "L", leftMotors);
+    printSide(4, "R", rightMotors);
     pros::lcd::print(5, "Battery %.0f%%", pros::battery::get_capacity());
 
-    lemlib::Pose pose = drive::chassis.getPose();
+    lemlib::Pose pose = chassis.getPose();
     pros::lcd::print(6, "X %.1f  Y %.1f  H %.1f", pose.x, pose.y, pose.theta);
 }
 
 // The controller screen only accepts one line every 50 ms, so each pass writes
 // one and all three refresh every 150 ms.
-void drawController(int line) {
+static void drawController(int line) {
     switch (line) {
         case 0:
-            controls::controller.print(0, 0, "%-14s", autons::list[autons::selected].name);
+            controller.print(0, 0, "%-14s", autons[selectedAuton].name);
             break;
         case 1: {
             int port;
             double temp;
             hottestMotor(port, temp);
-            controls::controller.print(1, 0, "Hot %d: %.0fC   ", port, temp);
+            controller.print(1, 0, "Hot %d: %.0fC   ", port, temp);
             break;
         }
         case 2:
-            controls::controller.print(2, 0, "Batt %.0f%%     ", pros::battery::get_capacity());
+            controller.print(2, 0, "Batt %.0f%%     ", pros::battery::get_capacity());
             break;
     }
 }
 
-void loop() {
+static void loop() {
     std::uint8_t lastButtons = 0;
     int controllerLine = 0;
 
@@ -92,14 +89,14 @@ void loop() {
         lastButtons = buttons;
 
         if (pressed & LCD_BTN_LEFT) {
-            autons::selected = (autons::selected + autons::count - 1) % autons::count;
+            selectedAuton = (selectedAuton + autonCount - 1) % autonCount;
         }
         if (pressed & LCD_BTN_RIGHT) {
-            autons::selected = (autons::selected + 1) % autons::count;
+            selectedAuton = (selectedAuton + 1) % autonCount;
         }
 
         drawBrain();
-        if (config::CONTROLLER_UI) {
+        if (CONTROLLER_UI) {
             drawController(controllerLine);
             controllerLine = (controllerLine + 1) % 3;
         }
@@ -108,11 +105,7 @@ void loop() {
     }
 }
 
-} // namespace
-
-void init() {
+void initUI() {
     pros::lcd::initialize();
     pros::Task uiTask(loop, "UI");
 }
-
-} // namespace ui
