@@ -12,7 +12,7 @@ static int deadband(int value) {
 
 static float turnScale(int throttle) {
     float speed = std::abs(throttle) / 127.0f;
-    return TURN_SCALE_MIN + (TURN_SCALE_MAX - TURN_SCALE_MIN) * speed;
+    return TURN_WHEN_STILL + (TURN_AT_SPEED - TURN_WHEN_STILL) * speed;
 }
 
 // Turning harder builds up slowly; letting off or reversing snaps back.

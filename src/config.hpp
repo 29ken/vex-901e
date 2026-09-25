@@ -25,9 +25,10 @@ inline constexpr int STICK_DEADBAND = 8;
 inline constexpr bool BRAIN_UI      = true;
 inline constexpr bool CONTROLLER_UI = true;
 
-// Turn authority: less when sitting still, more at speed.
-inline constexpr float TURN_SCALE_MIN = 0.65f;
-inline constexpr float TURN_SCALE_MAX = 0.85f;
+// How much of full turn speed you get. Turning backs off as you drive
+// faster so a diagonal stick arcs forward instead of spinning.
+inline constexpr float TURN_WHEN_STILL = 0.80f;  // spin in place
+inline constexpr float TURN_AT_SPEED   = 0.45f;  // full throttle
 
 // Max change in turn output per 10 ms loop, out of 127.
 inline constexpr float TURN_RAMP_UP   = 7.0f;
