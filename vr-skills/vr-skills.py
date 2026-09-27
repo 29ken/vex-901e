@@ -24,18 +24,17 @@ class GameElements:
 
 #endregion VEXcode Generated Robot Configuration
 # ------------------------------------------------------------------
-# 901E Enthropic - V5RC Override VR Autonomous Coding Skills
-# Refactored v15 route (same robot actions as the v15 program).
+# 901E Enthropic - V5RC Override VR Autonomous Coding Skill 
 #
 # PRE-MATCH CHECKLIST (location-pin button above Start):
 #   Starting Location = B (robot at x -1564, y 368, heading 55)
 #   Preload Orientation = yellow on top
 #
-# Units: GPS millimetres (field centre is 0, 0) and GPS headings in degrees
+# Units: GPS millimeters (field center is 0, 0) and GPS headings in degrees
 # (0 = towards +y, 90 = towards +x). Arm and claw angles are motor degrees:
 # claw 167 = open, 467 = closed; arm 0 = lowest.
 #
-# Route (goal centres: left neutral (-1200, 600), left red (-1200, -600),
+# Route (goal centers: left neutral (-1200, 600), left red (-1200, -600),
 # bottom red (-600, -1200), bottom neutral (600, -1200), top blue (600, 1200),
 # top neutral (-600, 1200)):
 #   1. Left neutral goal: preload, then the wall unit at (-1745, 600).
