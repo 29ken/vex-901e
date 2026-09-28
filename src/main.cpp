@@ -2,11 +2,12 @@
 #include "drivetrain.hpp"
 #include "controls.hpp"
 #include "autons.hpp"
-#include "ui.hpp"
+#include "screens.hpp"
 
 void initialize() {
     initDrive();
-    initUI();
+    startBrainScreen();
+    startControllerScreen();
 }
 
 void disabled() {}

@@ -1,5 +1,6 @@
 #include "drivetrain.hpp"
 #include "config.hpp"
+#include <cstdlib>
 
 // Blue cartridge is for the 11W motors; the 5.5Ws ignore it.
 pros::MotorGroup leftMotors({LEFT_5W, LEFT_11W_A, LEFT_11W_B}, pros::MotorGearset::blue);
@@ -29,4 +30,15 @@ lemlib::Chassis chassis(drivetrain, lateralController, angularController, sensor
 void initDrive() {
     chassis.calibrate();
     chassis.setBrakeMode(pros::E_MOTOR_BRAKE_COAST);
+}
+
+std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors) {
+    std::vector<double> temps = motors.get_temperature_all();
+    std::vector<std::int8_t> ports = motors.get_port_all();
+    std::vector<MotorTemp> out;
+    for (std::size_t i = 0; i < temps.size(); i++) {
+        // An unplugged motor reports a huge error value instead of a temperature.
+        out.push_back({std::abs(ports[i]), temps[i], temps[i] < 200});
+    }
+    return out;
 }
