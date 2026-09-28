@@ -35,3 +35,6 @@ inline constexpr float TURN_RAMP_DOWN = 20.0f;
 
 // Left stick within ~17 degrees of horizontal counts as a pure spin.
 inline constexpr float SIDEWAYS_ZONE = 0.3f;
+
+// Left stick within ~7 degrees of straight up or down drives straight.
+inline constexpr float STRAIGHT_ZONE = 0.12f;
