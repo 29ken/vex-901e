@@ -15,8 +15,18 @@ static constexpr double COOL_TEMP = 25.0;  // where the heat bar starts filling
 static constexpr std::uint32_t DRIVER_MS = 105000;
 static constexpr std::uint32_t AUTON_MS = 15000;
 static constexpr std::uint32_t SPLASH_MS = 1200;
+static constexpr std::uint32_t MENU_TIMEOUT_MS = 5000;
+
+// The only buttons the menu touches. Everything else is free for mechanisms.
+static constexpr auto BTN_MENU  = pros::E_CONTROLLER_DIGITAL_X;
+static constexpr auto BTN_NEXT  = pros::E_CONTROLLER_DIGITAL_UP;
+static constexpr auto BTN_PLUS  = pros::E_CONTROLLER_DIGITAL_A;
+static constexpr auto BTN_MINUS = pros::E_CONTROLLER_DIGITAL_LEFT;
 
 enum class Phase { Splash, PreMatch, Auton, Driver };
+
+enum MenuItem { MENU_AUTON, MENU_BRAKES, MENU_TIMER, MENU_ITEMS };
+static const char* MENU_NAMES[] = {"Auton", "Brakes", "Timer"};
 
 struct Health {
     int plugged = 0;
@@ -30,6 +40,14 @@ struct Health {
 static std::string wanted[3];
 static std::string shown[3];
 static const char* queuedRumble = nullptr;
+
+static std::uint32_t phaseStart = 0;
+static std::uint32_t lastLeft = DRIVER_MS;
+
+static bool menuOpen = false;
+static int menuItem = MENU_AUTON;
+static std::uint32_t menuTouched = 0;
+static bool brakeHold = false;
 
 static void setLine(int line, const char* fmt, ...) {
     char text[16];
@@ -90,6 +108,22 @@ static void drawSplash(std::uint32_t now) {
     setLine(0, "     901E");
     setLine(1, " [%s]", bar(now / static_cast<double>(SPLASH_MS), 11).c_str());
     setLine(2, "");
+}
+
+static void drawMenu() {
+    setLine(0, "MENU %d/%d  X:out", menuItem + 1, MENU_ITEMS);
+    setLine(1, "%-8sUP:next", MENU_NAMES[menuItem]);
+    switch (menuItem) {
+        case MENU_AUTON:
+            setLine(2, "<%s>", center(autons[selectedAuton].name, 13).c_str());
+            break;
+        case MENU_BRAKES:
+            setLine(2, "<%s>", center(brakeHold ? "HOLD" : "COAST", 13).c_str());
+            break;
+        case MENU_TIMER:
+            setLine(2, "%s", center("A: restart", 15).c_str());
+            break;
+    }
 }
 
 static void drawPreMatch(const char* auton, double battery, const Health& h, std::uint32_t now) {
@@ -167,11 +201,53 @@ static Phase currentPhase(std::uint32_t sinceBoot) {
     return Phase::Driver;
 }
 
+// A steps forward, LEFT steps back.
+static void change(int item, int step, std::uint32_t now) {
+    switch (item) {
+        case MENU_AUTON:
+            selectedAuton = (selectedAuton + step + autonCount) % autonCount;
+            break;
+        case MENU_BRAKES:
+            brakeHold = !brakeHold;
+            chassis.setBrakeMode(brakeHold ? pros::E_MOTOR_BRAKE_HOLD : pros::E_MOTOR_BRAKE_COAST);
+            break;
+        case MENU_TIMER:
+            phaseStart = now;
+            lastLeft = DRIVER_MS;
+            break;
+    }
+    rumble(".");
+}
+
+static void handleButtons(Phase phase, std::uint32_t now) {
+    bool menu  = controller.get_digital_new_press(BTN_MENU);
+    bool next  = controller.get_digital_new_press(BTN_NEXT);
+    bool plus  = controller.get_digital_new_press(BTN_PLUS);
+    bool minus = controller.get_digital_new_press(BTN_MINUS);
+
+    if (menu) {
+        menuOpen = !menuOpen;
+        menuItem = MENU_AUTON;
+    }
+
+    if (menuOpen) {
+        if (next) menuItem = (menuItem + 1) % MENU_ITEMS;
+        if (plus) change(menuItem, +1, now);
+        if (minus) change(menuItem, -1, now);
+        if (menu || next || plus || minus) menuTouched = now;
+        // Never leave the menu covering the match clock.
+        if (now - menuTouched > MENU_TIMEOUT_MS) menuOpen = false;
+    } else if (phase == Phase::PreMatch) {
+        // Before a match the auton is the only thing worth changing, so skip the menu.
+        if (plus) change(MENU_AUTON, +1, now);
+        if (minus) change(MENU_AUTON, -1, now);
+    }
+}
+
 static void loop() {
     std::uint32_t boot = pros::millis();
     Phase phase = Phase::Splash;
-    std::uint32_t phaseStart = boot;
-    std::uint32_t lastLeft = DRIVER_MS;
+    phaseStart = boot;
     bool warnedHot = false;
     int warnedDead = 0;
 
@@ -190,7 +266,9 @@ static void loop() {
             phase = next;
             phaseStart = now;
             lastLeft = DRIVER_MS;
+            menuOpen = false;
         }
+        if (phase != Phase::Splash) handleButtons(phase, now);
         std::uint32_t elapsed = now - phaseStart;
         Health h = checkMotors();
         double battery = pros::battery::get_capacity();
@@ -202,16 +280,7 @@ static void loop() {
                 break;
 
             case Phase::PreMatch:
-                // D-pad picks the auton, but only while disabled so it can't change mid-match.
-                if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT)) {
-                    selectedAuton = (selectedAuton + autonCount - 1) % autonCount;
-                    rumble(".");
-                }
-                if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT)) {
-                    selectedAuton = (selectedAuton + 1) % autonCount;
-                    rumble(".");
-                }
-                drawPreMatch(autons[selectedAuton].name, battery, h, now);
+                drawPreMatch(auton, battery, h, now);
                 break;
 
             case Phase::Auton:
@@ -238,6 +307,7 @@ static void loop() {
                 break;
             }
         }
+        if (menuOpen) drawMenu();
 
         send();
         pros::delay(50);
