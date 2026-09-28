@@ -4,7 +4,7 @@
 #include "config.hpp"
 #include "controls.hpp"
 #include "drivetrain.hpp"
-#include "pid_tuner.hpp"
+#include "tuner.hpp"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -26,8 +26,14 @@ static constexpr auto BTN_MINUS = pros::E_CONTROLLER_DIGITAL_LEFT;
 
 enum class Phase { Splash, PreMatch, Auton, Driver };
 
-enum MenuItem { MENU_AUTON, MENU_BRAKES, MENU_TIMER, MENU_TURN_PID, MENU_MOVE_PID, MENU_ITEMS };
-static const char* MENU_NAMES[] = {"Auton", "Brakes", "Timer", "Turn PID", "Move PID"};
+// Calibrate before tuning: the PID tuner trusts odom to know where the robot is.
+enum MenuItem {
+    MENU_AUTON, MENU_BRAKES, MENU_TIMER,
+    MENU_CAL_DIST, MENU_CAL_TURN, MENU_TURN_PID, MENU_MOVE_PID,
+    MENU_ITEMS
+};
+static const char* MENU_NAMES[] = {"Auton", "Brakes", "Timer",
+                                   "Cal dist", "Cal turn", "Turn PID", "Move PID"};
 
 struct Health {
     int plugged = 0;
@@ -110,17 +116,37 @@ static void drawSplash(std::uint32_t now) {
     setLine(2, "");
 }
 
-static void drawTuneLine(TuneKind kind, const TuneResult& r, Phase phase, std::uint32_t now) {
+static void drawTuneLine(TuneKind kind, const char* name, const TuneResult& r, Phase phase,
+                         std::uint32_t now) {
     if (tuning == kind) {
         setLine(2, "TUNE [%s]", scanner(now).c_str());
     } else if (r.ok) {
-        setLine(2, "P%.2f  D%.1f", r.kP, r.kD);
+        // OK = the test moves landed on target. RETRY = run it again, it keeps
+        // adjusting from where it left off.
+        setLine(1, "%-9s%6s", name, r.exact ? "OK" : "RETRY");
+        // Rounded to fit; the brain and terminal have the exact numbers.
+        setLine(2, "P%.3g D%.3g I%.1g", r.kP, r.kD, r.kI);
     } else if (r.done) {
         setLine(2, "FAIL %s", r.error);
     } else if (phase != Phase::Driver) {
         setLine(2, "%s", center("enable robot", 15).c_str());
     } else {
         setLine(2, "%s", center("A: auto-tune", 15).c_str());
+    }
+}
+
+static void drawCalLine(TuneKind kind, const CalResult& r) {
+    bool dist = kind == TUNE_CAL_DIST;
+    if (tuning == kind) {
+        if (dist) {
+            setLine(2, "%4.1f/%.0fin A:ok", static_cast<float>(calReading), CAL_INCHES);
+        } else {
+            setLine(2, "%3.0f/360  A:ok", static_cast<float>(calReading));
+        }
+    } else if (r.done) {
+        setLine(2, dist || r.value > 5 ? "%s %.3f" : "%s %+.2f", r.label, r.value);
+    } else {
+        setLine(2, "%s", center(dist ? "A: push 48in" : "A: spin 360", 15).c_str());
     }
 }
 
@@ -137,11 +163,17 @@ static void drawMenu(Phase phase, std::uint32_t now) {
         case MENU_TIMER:
             setLine(2, "%s", center("A: restart", 15).c_str());
             break;
+        case MENU_CAL_DIST:
+            drawCalLine(TUNE_CAL_DIST, distCal);
+            break;
+        case MENU_CAL_TURN:
+            drawCalLine(TUNE_CAL_TURN, turnCal);
+            break;
         case MENU_TURN_PID:
-            drawTuneLine(TUNE_TURN, turnTune, phase, now);
+            drawTuneLine(TUNE_TURN, "Turn PID", turnTune, phase, now);
             break;
         case MENU_MOVE_PID:
-            drawTuneLine(TUNE_MOVE, moveTune, phase, now);
+            drawTuneLine(TUNE_MOVE, "Move PID", moveTune, phase, now);
             break;
     }
 }
@@ -221,13 +253,35 @@ static Phase currentPhase(std::uint32_t sinceBoot) {
     return Phase::Driver;
 }
 
+// On the tuning items A starts, confirms, or does nothing while busy, and
+// LEFT cancels.
+static void tuneButton(int item, int step, Phase phase) {
+    if (step < 0) {
+        if (tuning != TUNE_NONE) cancelTune();
+        return;
+    }
+    if (tuning == TUNE_CAL_DIST || tuning == TUNE_CAL_TURN) {
+        confirmCal();
+    } else if (tuning != TUNE_NONE) {
+        return;
+    } else if (item == MENU_CAL_DIST) {
+        startDistCal();
+    } else if (item == MENU_CAL_TURN) {
+        startTurnCal();
+    } else if (phase != Phase::Driver) {
+        return;  // motors ignore commands while disabled, so a tune would just time out
+    } else if (item == MENU_TURN_PID) {
+        startTurnTune();
+    } else {
+        startMoveTune();
+    }
+    rumble(".");
+}
+
 // A steps forward, LEFT steps back.
 static void change(int item, int step, Phase phase, std::uint32_t now) {
-    if (item == MENU_TURN_PID || item == MENU_MOVE_PID) {
-        // Motors ignore commands while disabled, so a tune would just time out.
-        if (step < 0 || phase != Phase::Driver || tuning != TUNE_NONE) return;
-        item == MENU_TURN_PID ? startTurnTune() : startMoveTune();
-        rumble(".");
+    if (item >= MENU_CAL_DIST) {
+        tuneButton(item, step, phase);
         return;
     }
 
@@ -256,6 +310,8 @@ static void handleButtons(Phase phase, std::uint32_t now) {
     if (menu) {
         menuOpen = !menuOpen;
         menuItem = MENU_AUTON;
+        // Nothing keeps running once its screen is gone; driver control would stay paused.
+        if (!menuOpen) cancelTune();
     }
 
     if (menuOpen) {
@@ -295,6 +351,7 @@ static void loop() {
             phaseStart = now;
             lastLeft = DRIVER_MS;
             menuOpen = false;
+            cancelTune();
         }
         if (phase != Phase::Splash) handleButtons(phase, now);
         std::uint32_t elapsed = now - phaseStart;
@@ -337,9 +394,15 @@ static void loop() {
         }
         if (menuOpen) drawMenu(phase, now);
 
+        // Two taps when a tune or calibration lands, one long buzz when it doesn't.
         static TuneKind lastTuning = TUNE_NONE;
-        if (lastTuning == TUNE_TURN && tuning == TUNE_NONE) rumble(turnTune.ok ? ". ." : "-");
-        if (lastTuning == TUNE_MOVE && tuning == TUNE_NONE) rumble(moveTune.ok ? ". ." : "-");
+        if (lastTuning != TUNE_NONE && tuning == TUNE_NONE) {
+            bool landed = lastTuning == TUNE_TURN     ? turnTune.exact
+                        : lastTuning == TUNE_MOVE     ? moveTune.exact
+                        : lastTuning == TUNE_CAL_DIST ? distCal.done
+                                                      : turnCal.done;
+            rumble(landed ? ". ." : "-");
+        }
         lastTuning = tuning;
 
         send();

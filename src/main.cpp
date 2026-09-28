@@ -2,7 +2,7 @@
 #include "drivetrain.hpp"
 #include "controls.hpp"
 #include "autons.hpp"
-#include "pid_tuner.hpp"
+#include "tuner.hpp"
 #include "screens.hpp"
 
 void initialize() {

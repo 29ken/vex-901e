@@ -3,7 +3,7 @@
 #include "autons.hpp"
 #include "config.hpp"
 #include "drivetrain.hpp"
-#include "pid_tuner.hpp"
+#include "tuner.hpp"
 #include <cstdio>
 
 static void printSide(int line, const char* label, pros::MotorGroup& motors) {
@@ -34,10 +34,14 @@ static void draw() {
     lemlib::Pose pose = chassis.getPose();
     pros::lcd::print(6, "X %.1f  Y %.1f  H %.1f", pose.x, pose.y, pose.theta);
 
-    // Tuned gains only last until reboot, so keep them up where they're easy to copy.
+    // Tuned values only last until reboot, so keep them up where they're easy to copy.
+    if (distCal.done || turnCal.done) {
+        pros::lcd::print(2, "Cal %s %.4f  %s %.4f", distCal.label, distCal.value,
+                         turnCal.label, turnCal.value);
+    }
     if (turnTune.ok || moveTune.ok) {
-        pros::lcd::print(7, "PID turn P%.2f D%.1f  move P%.2f D%.1f",
-                         turnTune.kP, turnTune.kD, moveTune.kP, moveTune.kD);
+        pros::lcd::print(7, "PID T %.3g/%.2g/%.3g  M %.3g/%.2g/%.3g",
+                         turnTune.kP, turnTune.kI, turnTune.kD, moveTune.kP, moveTune.kI, moveTune.kD);
     }
 }
 
