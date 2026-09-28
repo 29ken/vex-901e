@@ -15,9 +15,26 @@ inline constexpr std::int8_t LEFT_11W_B = -13;
 
 // Port 4 is the radio.
 
-inline constexpr float TRACK_WIDTH      = 11.5f;  // TODO: measure, left wheel center to right
-inline constexpr float DRIVE_RPM        = 450.0f;
-inline constexpr float HORIZONTAL_DRIFT = 2.0f;   // 8 if we ever put traction wheels on
+// "Cal turn" and "Cal dist" in the controller menu measure the real values
+// for these. Paste what they print, then re-upload.
+inline constexpr float TRACK_WIDTH          = 11.5f;
+inline constexpr float DRIVE_WHEEL_DIAMETER = 2.75f;
+inline constexpr float DRIVE_RPM            = 450.0f;
+inline constexpr float HORIZONTAL_DRIFT     = 2.0f;   // 8 if we ever put traction wheels on
+
+// Odom sensors. Leave a port at 0 until it's plugged in; LemLib falls back to
+// the drive encoders for anything missing.
+inline constexpr std::uint8_t IMU_PORT            = 0;
+inline constexpr std::int8_t  VERTICAL_POD_PORT   = 0;  // rotation sensor, negative = reversed
+inline constexpr std::int8_t  HORIZONTAL_POD_PORT = 0;
+inline constexpr float POD_WHEEL_DIAMETER    = 2.125f;  // "Cal dist" measures this once the pod is in
+inline constexpr float VERTICAL_POD_OFFSET   = 0.0f;    // inches from center of rotation, left is negative
+inline constexpr float HORIZONTAL_POD_OFFSET = 0.0f;    // inches from center of rotation, behind is negative
+
+// How close driveInches() / turnDegrees() land. The PID tuner adjusts until
+// test moves land inside these. Tighter = more exact, but slower to finish.
+inline constexpr float DRIVE_EXACT_IN = 0.25f;
+inline constexpr float TURN_EXACT_DEG = 0.5f;
 
 inline constexpr int STICK_DEADBAND = 8;
 

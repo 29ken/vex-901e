@@ -2,7 +2,7 @@
 #include "drivetrain.hpp"
 #include "controls.hpp"
 #include "autons.hpp"
-#include "pid_tuner.hpp"
+#include "tuner.hpp"
 #include "screens.hpp"
 
 void initialize() {
@@ -20,6 +20,7 @@ void autonomous() {
 }
 
 void opcontrol() {
+    applyDriverBrakes();
     while (true) {
         if (tuning == TUNE_NONE) driveControl();
         pros::delay(10);

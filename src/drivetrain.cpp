@@ -1,5 +1,6 @@
 #include "drivetrain.hpp"
 #include "config.hpp"
+#include <cmath>
 #include <cstdlib>
 
 // Blue cartridge is for the 11W motors; the 5.5Ws ignore it.
@@ -9,16 +10,26 @@ pros::MotorGroup rightMotors({RIGHT_11W_A, RIGHT_5W, RIGHT_11W_B}, pros::MotorGe
 lemlib::Drivetrain drivetrain(&leftMotors,
                               &rightMotors,
                               TRACK_WIDTH,
-                              lemlib::Omniwheel::NEW_275,
+                              DRIVE_WHEEL_DIAMETER,
                               DRIVE_RPM,
                               HORIZONTAL_DRIFT);
 
-// No IMU or tracking wheels yet, so odom runs off the drive encoders.
-lemlib::OdomSensors sensors(nullptr, nullptr, nullptr, nullptr, nullptr);
+static lemlib::TrackingWheel* makePod(std::int8_t port, float offset) {
+    if (!port) return nullptr;
+    return new lemlib::TrackingWheel(new pros::Rotation(port), POD_WHEEL_DIAMETER, offset);
+}
+
+static pros::Imu* imu = IMU_PORT ? new pros::Imu(IMU_PORT) : nullptr;
+static lemlib::TrackingWheel* verticalPod = makePod(VERTICAL_POD_PORT, VERTICAL_POD_OFFSET);
+static lemlib::TrackingWheel* horizontalPod = makePod(HORIZONTAL_POD_PORT, HORIZONTAL_POD_OFFSET);
+
+lemlib::OdomSensors sensors(verticalPod, nullptr, horizontalPod, nullptr, imu);
 
 // kP, kI, kD, anti-windup, small error, small timeout, large error, large timeout, slew
-lemlib::ControllerSettings lateralController(10, 0, 3, 3, 1, 100, 3, 500, 20);
-lemlib::ControllerSettings angularController(2, 0, 10, 3, 1, 100, 3, 500, 0);
+// A motion ends once it's within half the exact tolerance for 100 ms, or inside
+// it for 300 ms if it's creeping, so it never quits while still off target.
+lemlib::ControllerSettings lateralController(10, 0, 3, 3, DRIVE_EXACT_IN / 2, 100, DRIVE_EXACT_IN, 300, 20);
+lemlib::ControllerSettings angularController(2, 0, 10, 3, TURN_EXACT_DEG / 2, 100, TURN_EXACT_DEG, 300, 0);
 
 // deadband, min output, curve gain
 lemlib::ExpoDriveCurve throttleCurve(3, 10, 1.019);
@@ -30,6 +41,16 @@ lemlib::Chassis chassis(drivetrain, lateralController, angularController, sensor
 void initDrive() {
     chassis.calibrate();
     chassis.setBrakeMode(pros::E_MOTOR_BRAKE_COAST);
+}
+
+void driveInches(float inches, int timeout, bool async) {
+    lemlib::Pose p = chassis.getPose(true);
+    chassis.moveToPoint(p.x + inches * std::sin(p.theta), p.y + inches * std::cos(p.theta), timeout,
+                        {.forwards = inches >= 0}, async);
+}
+
+void turnDegrees(float degrees, int timeout, bool async) {
+    chassis.turnToHeading(chassis.getPose().theta + degrees, timeout, {}, async);
 }
 
 std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors) {
