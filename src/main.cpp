@@ -20,6 +20,7 @@ void autonomous() {
 }
 
 void opcontrol() {
+    applyDriverBrakes();
     while (true) {
         if (tuning == TUNE_NONE) driveControl();
         pros::delay(10);

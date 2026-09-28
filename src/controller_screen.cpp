@@ -48,7 +48,6 @@ static std::uint32_t lastLeft = DRIVER_MS;
 static bool menuOpen = false;
 static int menuItem = MENU_AUTON;
 static std::uint32_t menuTouched = 0;
-static bool brakeHold = false;
 
 static void setLine(int line, const char* fmt, ...) {
     char text[16];
@@ -133,7 +132,7 @@ static void drawMenu(Phase phase, std::uint32_t now) {
             setLine(2, "<%s>", center(autons[selectedAuton].name, 13).c_str());
             break;
         case MENU_BRAKES:
-            setLine(2, "<%s>", center(brakeHold ? "HOLD" : "COAST", 13).c_str());
+            setLine(2, "<%s>", center(driverBrakeHold ? "HOLD" : "COAST", 13).c_str());
             break;
         case MENU_TIMER:
             setLine(2, "%s", center("A: restart", 15).c_str());
@@ -237,8 +236,8 @@ static void change(int item, int step, Phase phase, std::uint32_t now) {
             selectedAuton = (selectedAuton + step + autonCount) % autonCount;
             break;
         case MENU_BRAKES:
-            brakeHold = !brakeHold;
-            chassis.setBrakeMode(brakeHold ? pros::E_MOTOR_BRAKE_HOLD : pros::E_MOTOR_BRAKE_COAST);
+            driverBrakeHold = !driverBrakeHold;
+            applyDriverBrakes();
             break;
         case MENU_TIMER:
             phaseStart = now;

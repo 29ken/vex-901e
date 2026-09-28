@@ -29,6 +29,11 @@ inline constexpr float POD_WHEEL_DIAMETER    = 2.125f;
 inline constexpr float VERTICAL_POD_OFFSET   = 0.0f;    // inches from center of rotation, left is negative
 inline constexpr float HORIZONTAL_POD_OFFSET = 0.0f;    // inches from center of rotation, behind is negative
 
+// How close driveInches() / turnDegrees() land. Tighter = more exact, but
+// slower to finish.
+inline constexpr float DRIVE_EXACT_IN = 0.25f;
+inline constexpr float TURN_EXACT_DEG = 0.5f;
+
 inline constexpr int STICK_DEADBAND = 8;
 
 // Turn the screens on or off. The brain's auton selector shows either way.

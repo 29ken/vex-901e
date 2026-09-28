@@ -6,6 +6,12 @@
 
 pros::Controller controller(pros::E_CONTROLLER_MASTER);
 
+bool driverBrakeHold = false;
+
+void applyDriverBrakes() {
+    chassis.setBrakeMode(driverBrakeHold ? pros::E_MOTOR_BRAKE_HOLD : pros::E_MOTOR_BRAKE_COAST);
+}
+
 static int deadband(int value) {
     return (std::abs(value) < STICK_DEADBAND) ? 0 : value;
 }
