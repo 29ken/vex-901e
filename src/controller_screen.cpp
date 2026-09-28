@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include "controls.hpp"
 #include "drivetrain.hpp"
+#include "pid_tuner.hpp"
 #include <algorithm>
 #include <cstdarg>
 #include <cstdio>
@@ -25,8 +26,8 @@ static constexpr auto BTN_MINUS = pros::E_CONTROLLER_DIGITAL_LEFT;
 
 enum class Phase { Splash, PreMatch, Auton, Driver };
 
-enum MenuItem { MENU_AUTON, MENU_BRAKES, MENU_TIMER, MENU_ITEMS };
-static const char* MENU_NAMES[] = {"Auton", "Brakes", "Timer"};
+enum MenuItem { MENU_AUTON, MENU_BRAKES, MENU_TIMER, MENU_TURN_PID, MENU_MOVE_PID, MENU_ITEMS };
+static const char* MENU_NAMES[] = {"Auton", "Brakes", "Timer", "Turn PID", "Move PID"};
 
 struct Health {
     int plugged = 0;
@@ -110,7 +111,21 @@ static void drawSplash(std::uint32_t now) {
     setLine(2, "");
 }
 
-static void drawMenu() {
+static void drawTuneLine(TuneKind kind, const TuneResult& r, Phase phase, std::uint32_t now) {
+    if (tuning == kind) {
+        setLine(2, "TUNE [%s]", scanner(now).c_str());
+    } else if (r.ok) {
+        setLine(2, "P%.2f  D%.1f", r.kP, r.kD);
+    } else if (r.done) {
+        setLine(2, "FAIL %s", r.error);
+    } else if (phase != Phase::Driver) {
+        setLine(2, "%s", center("enable robot", 15).c_str());
+    } else {
+        setLine(2, "%s", center("A: auto-tune", 15).c_str());
+    }
+}
+
+static void drawMenu(Phase phase, std::uint32_t now) {
     setLine(0, "MENU %d/%d  X:out", menuItem + 1, MENU_ITEMS);
     setLine(1, "%-8sUP:next", MENU_NAMES[menuItem]);
     switch (menuItem) {
@@ -122,6 +137,12 @@ static void drawMenu() {
             break;
         case MENU_TIMER:
             setLine(2, "%s", center("A: restart", 15).c_str());
+            break;
+        case MENU_TURN_PID:
+            drawTuneLine(TUNE_TURN, turnTune, phase, now);
+            break;
+        case MENU_MOVE_PID:
+            drawTuneLine(TUNE_MOVE, moveTune, phase, now);
             break;
     }
 }
@@ -202,7 +223,15 @@ static Phase currentPhase(std::uint32_t sinceBoot) {
 }
 
 // A steps forward, LEFT steps back.
-static void change(int item, int step, std::uint32_t now) {
+static void change(int item, int step, Phase phase, std::uint32_t now) {
+    if (item == MENU_TURN_PID || item == MENU_MOVE_PID) {
+        // Motors ignore commands while disabled, so a tune would just time out.
+        if (step < 0 || phase != Phase::Driver || tuning != TUNE_NONE) return;
+        item == MENU_TURN_PID ? startTurnTune() : startMoveTune();
+        rumble(".");
+        return;
+    }
+
     switch (item) {
         case MENU_AUTON:
             selectedAuton = (selectedAuton + step + autonCount) % autonCount;
@@ -232,15 +261,15 @@ static void handleButtons(Phase phase, std::uint32_t now) {
 
     if (menuOpen) {
         if (next) menuItem = (menuItem + 1) % MENU_ITEMS;
-        if (plus) change(menuItem, +1, now);
-        if (minus) change(menuItem, -1, now);
-        if (menu || next || plus || minus) menuTouched = now;
+        if (plus) change(menuItem, +1, phase, now);
+        if (minus) change(menuItem, -1, phase, now);
+        if (menu || next || plus || minus || tuning != TUNE_NONE) menuTouched = now;
         // Never leave the menu covering the match clock.
         if (now - menuTouched > MENU_TIMEOUT_MS) menuOpen = false;
     } else if (phase == Phase::PreMatch) {
         // Before a match the auton is the only thing worth changing, so skip the menu.
-        if (plus) change(MENU_AUTON, +1, now);
-        if (minus) change(MENU_AUTON, -1, now);
+        if (plus) change(MENU_AUTON, +1, phase, now);
+        if (minus) change(MENU_AUTON, -1, phase, now);
     }
 }
 
@@ -307,7 +336,12 @@ static void loop() {
                 break;
             }
         }
-        if (menuOpen) drawMenu();
+        if (menuOpen) drawMenu(phase, now);
+
+        static TuneKind lastTuning = TUNE_NONE;
+        if (lastTuning == TUNE_TURN && tuning == TUNE_NONE) rumble(turnTune.ok ? ". ." : "-");
+        if (lastTuning == TUNE_MOVE && tuning == TUNE_NONE) rumble(moveTune.ok ? ". ." : "-");
+        lastTuning = tuning;
 
         send();
         pros::delay(50);
