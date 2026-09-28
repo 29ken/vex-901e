@@ -26,7 +26,7 @@ inline constexpr bool BRAIN_UI      = true;
 inline constexpr bool CONTROLLER_UI = true;
 
 // Turn authority: less when sitting still, more at speed.
-inline constexpr float TURN_SCALE_MIN = 0.65f;
+inline constexpr float TURN_SCALE_MIN = 0.8f;
 inline constexpr float TURN_SCALE_MAX = 0.85f;
 
 // Max change in turn output per 10 ms loop, out of 127.
