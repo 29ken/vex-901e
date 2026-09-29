@@ -39,6 +39,8 @@ void driveControl() {
     int leftX  = deadband(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_X));
     int rightX = deadband(controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X));
 
+    if (SPLIT_ARCADE) leftX = 0;
+
     // Pushing the left stick nearly straight up or down drives dead straight.
     if (std::abs(leftX) < std::abs(leftY) * STRAIGHT_ZONE) leftX = 0;
 
