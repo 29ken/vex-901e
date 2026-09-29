@@ -38,6 +38,10 @@ inline constexpr float TURN_EXACT_DEG = 0.5f;
 
 inline constexpr int STICK_DEADBAND = 8;
 
+// true: left stick only drives forward/back, right stick only turns.
+// false: left stick does both, and the right stick can also turn.
+inline constexpr bool SPLIT_ARCADE = true;
+
 // Turn the screens on or off. The brain's auton selector shows either way.
 inline constexpr bool BRAIN_UI      = true;
 inline constexpr bool CONTROLLER_UI = true;
