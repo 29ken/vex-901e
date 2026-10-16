@@ -44,7 +44,7 @@ inline constexpr int STICK_DEADBAND = 8;
 
 // true: left stick only drives forward/back, right stick only turns.
 // false: left stick does both, and the right stick can also turn.
-inline constexpr bool SPLIT_ARCADE = true;
+inline constexpr bool SPLIT_ARCADE = false;
 
 // Turn the screens on or off. The brain's auton selector shows either way.
 inline constexpr bool BRAIN_UI      = true;
@@ -61,5 +61,5 @@ inline constexpr float TURN_RAMP_DOWN = 20.0f;
 // Left stick within ~17 degrees of horizontal counts as a pure spin.
 inline constexpr float SIDEWAYS_ZONE = 0.3f;
 
-// Left stick within ~7 degrees of straight up or down drives straight.
-inline constexpr float STRAIGHT_ZONE = 0.12f;
+// Left stick within ~11 degrees of straight up or down drives straight.
+inline constexpr float STRAIGHT_ZONE = 0.2f;
