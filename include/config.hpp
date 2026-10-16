@@ -4,20 +4,20 @@
 // Ports and tuning constants. Negative port = motor is reversed.
 
 // Right drive
-inline constexpr std::int8_t RIGHT_11W_A = 1;
-inline constexpr std::int8_t RIGHT_5W    = 2;
-inline constexpr std::int8_t RIGHT_11W_B = 3;
-
-// constants for ports 16 and 17: Cascade
-inline constexpr std::int8_t LIFT_MOTOR_A = 16;
-inline constexpr std::int8_t LIFT_MOTOR_B = -17; // Change to 17 if both spin the same way
+inline constexpr std::int8_t RIGHT_5W    = 10;
+inline constexpr std::int8_t RIGHT_11W_A = 9;
+inline constexpr std::int8_t RIGHT_11W_B = 8;
 
 // Left drive, all mounted backwards
-inline constexpr std::int8_t LEFT_5W    = -11;
-inline constexpr std::int8_t LEFT_11W_A = -12;
-inline constexpr std::int8_t LEFT_11W_B = -13;
+inline constexpr std::int8_t LEFT_5W    = -20;
+inline constexpr std::int8_t LEFT_11W_A = -19;
+inline constexpr std::int8_t LEFT_11W_B = -18;
 
-// Port 4 is the radio.
+// Cascade lift. If the two sides fight each other, flip the sign on one.
+inline constexpr std::int8_t LIFT_LEFT  = 17;
+inline constexpr std::int8_t LIFT_RIGHT = -5;
+
+// Port 16 is the intake, port 15 the radio.
 
 // "Cal turn" and "Cal dist" in the controller menu measure the real values
 // for these. Paste what they print, then re-upload.
@@ -29,8 +29,8 @@ inline constexpr float HORIZONTAL_DRIFT     = 2.0f;   // 8 if we ever put tracti
 // Odom sensors. Leave a port at 0 until it's plugged in; LemLib falls back to
 // the drive encoders for anything missing.
 inline constexpr std::uint8_t IMU_PORT            = 0;
-inline constexpr std::int8_t  VERTICAL_POD_PORT   = 0;  // rotation sensor, negative = reversed
-inline constexpr std::int8_t  HORIZONTAL_POD_PORT = 0;
+inline constexpr std::int8_t  VERTICAL_POD_PORT   = 6;  // rotation sensor, negative = reversed
+inline constexpr std::int8_t  HORIZONTAL_POD_PORT = 7;
 inline constexpr float POD_WHEEL_DIAMETER    = 2.125f;  // "Cal dist" measures this once the pod is in
 inline constexpr float VERTICAL_POD_OFFSET   = 0.0f;    // inches from center of rotation, left is negative
 inline constexpr float HORIZONTAL_POD_OFFSET = 0.0f;    // inches from center of rotation, behind is negative
@@ -44,7 +44,7 @@ inline constexpr int STICK_DEADBAND = 8;
 
 // true: left stick only drives forward/back, right stick only turns.
 // false: left stick does both, and the right stick can also turn.
-inline constexpr bool SPLIT_ARCADE = true;
+inline constexpr bool SPLIT_ARCADE = false;
 
 // Turn the screens on or off. The brain's auton selector shows either way.
 inline constexpr bool BRAIN_UI      = true;
@@ -61,5 +61,5 @@ inline constexpr float TURN_RAMP_DOWN = 20.0f;
 // Left stick within ~17 degrees of horizontal counts as a pure spin.
 inline constexpr float SIDEWAYS_ZONE = 0.3f;
 
-// Left stick within ~7 degrees of straight up or down drives straight.
-inline constexpr float STRAIGHT_ZONE = 0.12f;
+// Left stick within ~11 degrees of straight up or down drives straight.
+inline constexpr float STRAIGHT_ZONE = 0.2f;

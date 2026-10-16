@@ -2,6 +2,7 @@
 #include "drivetrain.hpp"
 #include "controls.hpp"
 #include "autons.hpp"
+#include "config.hpp"
 #include "pros/adi.hpp"
 #include "tuner.hpp"
 #include "screens.hpp"
@@ -24,7 +25,7 @@ void opcontrol() {
 
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
-    pros::MotorGroup lift({-16, 17}); // Use -17 if one motor lifts backwards
+    pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT});
     pros::adi::DigitalOut wrist ('A');
     bool wrist_retracted = false;
     pros::adi::DigitalOut claw ('B');
@@ -51,27 +52,16 @@ void opcontrol() {
             lift.move(0);         // Hold still
         }
 
-        pros::delay(10); // Keep just this one delay at the bottom
-
-
-// 3. Piston control with A button
+        // 3. Piston control with A button. new_press only fires once per
+        // press, so holding A can't toggle it over and over.
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
-        wrist_retracted = !wrist_retracted;
-        wrist.set_value(wrist_retracted);
-        
-        pros::delay(100000); // Delay to prevent rapid toggling
-        
-        claw_extended = !claw_extended;
-        claw.set_value(claw_extended);
+            wrist_retracted = !wrist_retracted;
+            wrist.set_value(wrist_retracted);
 
+            claw_extended = !claw_extended;
+            claw.set_value(claw_extended);
+        }
+
+        pros::delay(10); // Keep just this one delay at the bottom
     }
-
-    pros::delay(10);
 }
-
-    }
-
-
-
-
-
