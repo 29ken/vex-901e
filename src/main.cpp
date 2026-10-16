@@ -3,6 +3,7 @@
 #include "controls.hpp"
 #include "autons.hpp"
 #include "config.hpp"
+#include "lift.hpp"
 #include "pros/adi.hpp"
 #include "tuner.hpp"
 #include "screens.hpp"
@@ -25,7 +26,6 @@ void opcontrol() {
 
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
-    pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT});
     pros::Motor intake(INTAKE);
     pros::adi::DigitalOut wrist ('A');
     bool wrist_retracted = false;
@@ -46,11 +46,11 @@ void opcontrol() {
 
         // 2. Lift control: R2 up, R1 down
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            lift.move(127);       // Move UP
+            moveLift(127);        // Move UP, stopping at the top once it's found
         } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-            lift.move(-127);      // Move DOWN
+            moveLift(-127);       // Move DOWN
         } else {
-            lift.move(0);         // Hold still
+            moveLift(0);          // Hold still
         }
 
         // 3. Intake: hold B to pull in, Y to push out
