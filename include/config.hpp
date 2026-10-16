@@ -17,7 +17,10 @@ inline constexpr std::int8_t LEFT_11W_B = -18;
 inline constexpr std::int8_t LIFT_LEFT  = 17;
 inline constexpr std::int8_t LIFT_RIGHT = -5;
 
-// Port 16 is the intake, port 15 the radio.
+// Intake. If B pushes out instead of pulling in, make this -16.
+inline constexpr std::int8_t INTAKE = 16;
+
+// Port 15 is the radio.
 
 // "Cal turn" and "Cal dist" in the controller menu measure the real values
 // for these. Paste what they print, then re-upload.
