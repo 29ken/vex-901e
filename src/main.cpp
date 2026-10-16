@@ -44,9 +44,9 @@ void opcontrol() {
         }
 
         // 2. Lift control with R1 and R2
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_X)) {
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
             lift.move(127);       // Move UP
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             lift.move(-127);      // Move DOWN
         } else {
             lift.move(0);         // Hold still
