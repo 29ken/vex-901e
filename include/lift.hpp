@@ -7,21 +7,25 @@
 
 extern pros::MotorGroup lift;
 
-// Starts the lift's background task. Call once from initialize().
+// Starts the lift's background task and calls wherever the lift is right now
+// height 0. Call once from initialize(), with the lift all the way down.
 void initLift();
 
-// Hand control from R1/R2, + is up. Anything but 0 cancels a preset move or homing.
+// Hand control from R1/R2, + is up. Anything but 0 cancels a preset move.
 void liftManual(int power);
 // Goes to the next preset height above where the lift is, or is already headed.
 void liftNextPreset();
-// Goes all the way down and calls that height 0. This is the homing, and it
-// re-zeros every time, so any drift is gone after each trip to the bottom.
+// Goes down to height 0 and stops there.
 void liftDown();
-bool liftHomed();
+// The L2 button, called every loop with whether it's held. A tap is
+// liftDown(). Holding it lowers the lift slowly past height 0; let go when it
+// touches the bottom and that becomes the new 0. Use it if the program was
+// started with the lift up.
+void liftDownButton(bool held);
 
 struct LiftStatus {
     bool sensorOk;
-    bool homed;
+    bool zeroed;
     bool backwards;  // the sensor counts down when the lift goes up
     double height;   // sensor degrees above the bottom
 };
@@ -33,16 +37,23 @@ inline constexpr double LIFT_KP = 0.5;            // power per degree off target
 // plus whatever it's carrying; if a preset stops short, raise this.
 inline constexpr int LIFT_MIN_POWER = 25;
 inline constexpr double LIFT_TOLERANCE = 10;      // presets closer than this to the lift are skipped
-inline constexpr int LIFT_HOME_POWER = 40;        // gentle push into the bottom
 inline constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 3000;
+
+// The winch has no stop at the bottom: unwound too far, it winds the string
+// the other way and lifts the lift back up. So nothing drives below this.
+inline constexpr double LIFT_BOTTOM = 5;
+// Holding L2 this long lowers slowly past the bottom limit to re-zero.
+inline constexpr std::uint32_t LIFT_REZERO_HOLD_MS = 600;
+inline constexpr int LIFT_REZERO_POWER = 30;
+
 // Moved this far the wrong way while pushing at least this hard = sensor
 // backwards. Low power doesn't count: a heavy load can sag while creeping.
 inline constexpr double LIFT_WRONG_WAY = 20;
 inline constexpr int LIFT_WRONG_WAY_POWER = 80;
 
-// Stalled = pushing but barely turning, for LIFT_STALL_MS. Only near-full power
-// counts at the top, so a heavy load hanging still mid-air isn't mistaken for it.
-inline constexpr int LIFT_BOTTOM_STALL_POWER = 30;
+// The top is a real hard stop. Pushing at near-full power but barely turning
+// for this long means it's there; part power doesn't count, so a heavy load
+// hanging still mid-air isn't mistaken for the top.
 inline constexpr int LIFT_TOP_STALL_POWER = 100;
 inline constexpr double LIFT_STALL_RPM = 5;
 inline constexpr std::uint32_t LIFT_STALL_MS = 250;
@@ -53,33 +64,21 @@ inline constexpr double LIFT_TOP_MARGIN = 15;     // stop this far under the lea
 inline constexpr int LIFT_SLOW_POWER = 40;
 
 // Everything below is the lift's logic, kept apart from the motors so
-// test/lift_check.cpp can run it against a simulated lift.
+// test/lift_check.cpp can run it against a simulated winch.
 
-struct StallTimer {
-    std::uint32_t since = 0;
-
-    bool stalled(int power, int minPower, double rpm, std::uint32_t now) {
-        if (std::abs(power) < minPower || std::fabs(rpm) > LIFT_STALL_RPM) {
-            since = 0;
-            return false;
-        }
-        if (!since) since = now;
-        return now - since >= LIFT_STALL_MS;
-    }
-};
-
-// Learns where the top is from the first stall going up, then slows near it
-// and stops just under it. Works in raw sensor degrees, so homing doesn't move it.
+// Learns where the top is from the first full-power stall going up, then slows
+// near it and stops just under it. Works in raw sensor degrees, so re-zeroing
+// doesn't move it.
 // ponytail: the first stall wins, so a snag on the way up becomes the top until
 // the program restarts. Add a re-learn button if that bites.
 struct LiftTop {
     bool found = false;
     double position = 0;
-    StallTimer stall;
+    std::uint32_t stalledSince = 0;
 
     int limit(int power, double raw, double rpm, std::uint32_t now) {
         if (power <= 0) {
-            stall.since = 0;
+            stalledSince = 0;
             return power;
         }
         if (found) {
@@ -88,7 +87,12 @@ struct LiftTop {
             if (left < LIFT_SLOW_ZONE) return std::min(power, LIFT_SLOW_POWER);
             return power;
         }
-        if (stall.stalled(power, LIFT_TOP_STALL_POWER, rpm, now)) {
+        if (power < LIFT_TOP_STALL_POWER || std::fabs(rpm) > LIFT_STALL_RPM) {
+            stalledSince = 0;
+            return power;
+        }
+        if (!stalledSince) stalledSince = now;
+        if (now - stalledSince >= LIFT_STALL_MS) {
             found = true;
             position = raw;
             return 0;  // stop grinding into the stop
@@ -98,21 +102,27 @@ struct LiftTop {
 };
 
 struct LiftControl {
-    enum Mode { IDLE, MANUAL, TARGET, HOMING };
+    enum Mode { IDLE, MANUAL, TARGET, REZERO };
     Mode mode = IDLE;
-    bool homed = false;
+    bool zeroed = false;
     bool backwards = false;
     double zero = 0;    // raw sensor reading at the bottom
     double target = 0;  // height being driven to
     int approach = 1;   // +1 going up to the target, -1 coming down to it
-    double stoppedShort = 0;  // how far short the last move ran out of time
     int manualPower = 0;
+    double stoppedShort = 0;  // how far short the last move ran out of time
     double startRaw = 0;
     std::uint32_t startTime = 0;
-    StallTimer bottom;
+    bool downHeld = false;
+    std::uint32_t downSince = 0;
     LiftTop top;
 
     double height(double raw) const { return raw - zero; }
+
+    void setZero(double raw) {
+        zero = raw;
+        zeroed = true;
+    }
 
     void manual(int power) {
         manualPower = power;
@@ -124,26 +134,39 @@ struct LiftControl {
     }
 
     void nextPreset(double raw, std::uint32_t now) {
-        if (!homed || backwards) return;
+        if (!zeroed || backwards) return;
         double from = height(raw);
-        if (mode == TARGET) from = std::max(from, target);
+        if (mode == TARGET && approach > 0) from = std::max(from, target);
         for (double preset : LIFT_PRESETS) {
             if (preset > from + LIFT_TOLERANCE) {
-                begin(TARGET, raw, now);
-                target = preset;
-                approach = target > height(raw) ? 1 : -1;
+                driveTo(preset, raw, now);
                 return;
             }
         }
     }
 
     void down(double raw, std::uint32_t now) {
-        if (!backwards) begin(HOMING, raw, now);
+        if (zeroed && !backwards && height(raw) > LIFT_BOTTOM) driveTo(0, raw, now);
+    }
+
+    void downButton(bool held, double raw, std::uint32_t now) {
+        if (held && !downHeld) {
+            downHeld = true;
+            downSince = now;
+            down(raw, now);
+        } else if (held && mode == IDLE && now - downSince >= LIFT_REZERO_HOLD_MS) {
+            begin(REZERO, raw, now);  // only once it's already down at the bottom limit
+        } else if (!held && downHeld) {
+            downHeld = false;
+            if (mode == REZERO) {
+                setZero(raw);
+                mode = IDLE;
+            }
+        }
     }
 
     // Returns the power to send. While the robot is disabled the motors ignore
-    // commands, so a pending move or homing just waits instead of learning
-    // anything from the lift sitting still.
+    // commands, so a pending move just waits.
     int update(double raw, double rpm, bool enabled, std::uint32_t now) {
         if (!enabled) {
             begin(mode, raw, now);
@@ -153,18 +176,9 @@ struct LiftControl {
             case IDLE:
                 return 0;
             case MANUAL:
-                return top.limit(manualPower, raw, rpm, now);
-            case HOMING: {
-                if (wentWrongWay(raw, -1)) return 0;
-                int power = homed && height(raw) > LIFT_SLOW_ZONE ? -127 : -LIFT_HOME_POWER;
-                if (bottom.stalled(power, LIFT_BOTTOM_STALL_POWER, rpm, now)) {
-                    zero = raw;
-                    homed = true;
-                    mode = IDLE;
-                    return 0;
-                }
-                return power;
-            }
+                return bottomLimit(top.limit(manualPower, raw, rpm, now), raw);
+            case REZERO:
+                return -LIFT_REZERO_POWER;  // the driver decides where the bottom is
             case TARGET: {
                 double error = target - height(raw);
                 // Done once it reaches the target. The last stretch is at
@@ -185,8 +199,8 @@ struct LiftControl {
                 } else if (wentWrongWay(raw, error > 0 ? 1 : -1)) {
                     return 0;
                 }
-                int out = top.limit(static_cast<int>(power), raw, rpm, now);
-                if (power > 0 && out == 0) mode = IDLE;  // the preset is above the top
+                int out = bottomLimit(top.limit(static_cast<int>(power), raw, rpm, now), raw);
+                if (out == 0) mode = IDLE;  // reached the top or the bottom limit first
                 return out;
             }
         }
@@ -194,11 +208,25 @@ struct LiftControl {
     }
 
   private:
+    void driveTo(double height_, double raw, std::uint32_t now) {
+        begin(TARGET, raw, now);
+        target = height_;
+        approach = target > height(raw) ? 1 : -1;
+    }
+
     void begin(Mode m, double raw, std::uint32_t now) {
         mode = m;
         startRaw = raw;
         startTime = now;
-        bottom.since = 0;
+    }
+
+    // Never unwind the winch past the bottom; slow down on the way to it.
+    int bottomLimit(int power, double raw) const {
+        if (power >= 0 || !zeroed) return power;
+        double h = height(raw);
+        if (h <= LIFT_BOTTOM) return 0;
+        if (h < LIFT_SLOW_ZONE) return std::max(power, -LIFT_SLOW_POWER);
+        return power;
     }
 
     // If the sensor counts the opposite way to the motors, driving to a height

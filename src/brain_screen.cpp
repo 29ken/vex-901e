@@ -38,7 +38,7 @@ static void draw() {
     } else if (l.backwards) {
         std::snprintf(liftText, sizeof(liftText), "Lift sensor backwards");
     } else {
-        std::snprintf(liftText, sizeof(liftText), "Lift %.0f%s", l.height, l.homed ? "" : " (not homed)");
+        std::snprintf(liftText, sizeof(liftText), "Lift %.0f%s", l.height, l.zeroed ? "" : " (hold L2)");
     }
     pros::lcd::print(5, "Battery %.0f%%   %s", pros::battery::get_capacity(), liftText);
 
