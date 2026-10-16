@@ -17,6 +17,15 @@ inline constexpr std::int8_t LEFT_11W_B = -18;
 inline constexpr std::int8_t LIFT_LEFT  = 17;
 inline constexpr std::int8_t LIFT_RIGHT = -5;
 
+// Rotation sensor on the lift. Raising the lift should make "Lift" on the
+// brain screen go up; if it goes down, make this -4.
+inline constexpr std::int8_t LIFT_SENSOR = 4;
+
+// L1 steps up through these heights, lowest first, in sensor degrees above
+// the bottom. To find one: raise the lift with R2 until it lines up with the
+// pin or cone, then read "Lift" on the brain screen.
+inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
+
 // Intake. If B pushes out instead of pulling in, make this -16.
 inline constexpr std::int8_t INTAKE = 16;
 

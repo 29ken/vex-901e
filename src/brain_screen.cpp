@@ -3,6 +3,7 @@
 #include "autons.hpp"
 #include "config.hpp"
 #include "drivetrain.hpp"
+#include "lift.hpp"
 #include "tuner.hpp"
 #include <cstdio>
 
@@ -29,7 +30,17 @@ static void draw() {
 
     printSide(3, "L", leftMotors);
     printSide(4, "R", rightMotors);
-    pros::lcd::print(5, "Battery %.0f%%", pros::battery::get_capacity());
+    // Raise the lift by hand to a pin or cone and read this number for LIFT_PRESETS.
+    LiftStatus l = liftStatus();
+    char liftText[32];
+    if (!l.sensorOk) {
+        std::snprintf(liftText, sizeof(liftText), "Lift sensor missing");
+    } else if (l.backwards) {
+        std::snprintf(liftText, sizeof(liftText), "Lift sensor backwards");
+    } else {
+        std::snprintf(liftText, sizeof(liftText), "Lift %.0f%s", l.height, l.homed ? "" : " (not homed)");
+    }
+    pros::lcd::print(5, "Battery %.0f%%   %s", pros::battery::get_capacity(), liftText);
 
     lemlib::Pose pose = chassis.getPose();
     pros::lcd::print(6, "X %.1f  Y %.1f  H %.1f", pose.x, pose.y, pose.theta);
