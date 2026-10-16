@@ -1,10 +1,14 @@
 #!/bin/bash
-# Runs the PID tuner against simulated drivetrains on this computer (not the
-# robot). Rerun it after changing anything in src/tuner.cpp.
+# Runs the off-robot checks on this computer: the lift's max height logic,
+# then the PID tuner against simulated drivetrains. Rerun after changing
+# src/lift.cpp, include/lift.hpp or src/tuner.cpp.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
+
+clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude test/lift_check.cpp -o "$out/lift"
+"$out/lift"
 
 clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude -Isrc \
     -c test/tuner_sim.cpp -o "$out/sim.o"

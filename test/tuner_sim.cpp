@@ -1,7 +1,7 @@
 // Runs the real relay() and refine() from tuner.cpp against a simulated
 // drivetrain with velocity lag, dead time and static friction, driven by a
 // copy of LemLib's PID and motion exit rules.
-// Build and run with test/run_tuner_sim.sh.
+// Build and run with test/run_tests.sh.
 #include "tuner.cpp"
 #include <cassert>
 #include <deque>
