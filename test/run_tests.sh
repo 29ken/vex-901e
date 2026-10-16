@@ -1,6 +1,6 @@
 #!/bin/bash
-# Runs the PID tuner against simulated drivetrains on this computer (not the
-# robot). Rerun it after changing anything in src/tuner.cpp.
+# Runs the off-robot checks on this computer: the PID tuner against simulated
+# drivetrains. Rerun after changing src/tuner.cpp.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
