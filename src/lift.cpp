@@ -16,7 +16,8 @@ static bool readSensor(double& raw) {
 }
 
 static void loop() {
-    bool saidTop = false, saidHomed = false, saidBackwards = false, saidMissing = false;
+    bool saidTop = false, saidBackwards = false, saidMissing = false;
+    double lastZero = control.zero;
     while (true) {
         double raw;
         bool ok = readSensor(raw);
@@ -27,7 +28,7 @@ static void loop() {
                 power = control.update(raw, lift.get_actual_velocity(),
                                        !pros::competition::is_disabled(), pros::millis());
             } else {
-                // No sensor: presets and homing can't work, but hand control still does.
+                // No sensor: presets and the bottom limit can't work, but hand control still does.
                 if (control.mode != LiftControl::MANUAL) control.mode = LiftControl::IDLE;
                 power = control.mode == LiftControl::MANUAL ? control.manualPower : 0;
             }
@@ -36,9 +37,9 @@ static void loop() {
                 std::printf("Lift top found at %.0f\n", control.height(control.top.position));
                 saidTop = true;
             }
-            if (control.homed && !saidHomed) {
-                std::printf("Lift homed\n");
-                saidHomed = true;
+            if (control.zeroed && control.zero != lastZero) {
+                std::printf("Lift re-zeroed\n");
+                lastZero = control.zero;
             }
             if (control.backwards && !saidBackwards) {
                 std::printf("Lift sensor counts backwards; set LIFT_SENSOR to %d\n", -LIFT_SENSOR);
@@ -62,6 +63,14 @@ static void loop() {
 
 void initLift() {
     lift.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+    // Matches start with the lift down, so wherever it is now is the bottom.
+    double raw;
+    if (readSensor(raw)) {
+        control.setZero(raw);
+    } else {
+        std::printf("Lift sensor on port %d not found at startup; hold L2 to zero the lift\n",
+                    std::abs(LIFT_SENSOR));
+    }
     pros::Task task(loop, "Lift");
 }
 
@@ -84,14 +93,16 @@ void liftDown() {
     control.down(raw, pros::millis());
 }
 
-bool liftHomed() {
+void liftDownButton(bool held) {
+    double raw;
+    if (!readSensor(raw)) return;
     std::lock_guard<pros::Mutex> hold(mutex);
-    return control.homed;
+    control.downButton(held, raw, pros::millis());
 }
 
 LiftStatus liftStatus() {
     double raw;
     bool ok = readSensor(raw);
     std::lock_guard<pros::Mutex> hold(mutex);
-    return {ok, control.homed, control.backwards, control.height(raw)};
+    return {ok, control.zeroed, control.backwards, control.height(raw)};
 }

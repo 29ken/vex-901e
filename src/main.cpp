@@ -20,7 +20,6 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
-    liftDown();  // home the lift while the auton starts driving
     runAuton();
 }
 
@@ -36,7 +35,6 @@ void opcontrol() {
     
 
     applyDriverBrakes();
-    if (!liftHomed()) liftDown();
 
 
     while (true) {
@@ -46,7 +44,7 @@ void opcontrol() {
         }
 
         // 2. Lift: R2 up and R1 down by hand. L1 steps up through the preset
-        // heights, L2 goes all the way down and re-homes.
+        // heights. Tap L2 to go to the bottom; hold it to re-zero (see lift.hpp).
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             liftManual(127);
         } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
@@ -55,7 +53,7 @@ void opcontrol() {
             liftManual(0);
         }
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) liftNextPreset();
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) liftDown();
+        liftDownButton(master.get_digital(pros::E_CONTROLLER_DIGITAL_L2));
 
         // 3. Intake: hold B to pull in, Y to push out
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
