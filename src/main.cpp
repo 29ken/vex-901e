@@ -43,10 +43,10 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift control with R1 and R2
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        // 2. Lift control: R2 up, R1 down
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             lift.move(127);       // Move UP
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
             lift.move(-127);      // Move DOWN
         } else {
             lift.move(0);         // Hold still
