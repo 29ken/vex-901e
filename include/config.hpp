@@ -45,7 +45,7 @@ inline constexpr std::int8_t  VERTICAL_POD_PORT   = 6;  // rotation sensor, nega
 inline constexpr std::int8_t  HORIZONTAL_POD_PORT = 7;
 inline constexpr float POD_WHEEL_DIAMETER    = 2.125f;  // "Cal dist" measures this once the pod is in
 inline constexpr float VERTICAL_POD_OFFSET   = 0.0f;    // inches from center of rotation, left is negative
-inline constexpr float HORIZONTAL_POD_OFFSET = 0.0f;    // inches from center of rotation, behind is negative
+inline constexpr float HORIZONTAL_POD_OFFSET = -0.26f;  // inches from center of rotation, behind is negative
 
 // How close driveInches() / turnDegrees() land. The PID tuner adjusts until
 // test moves land inside these. Tighter = more exact, but slower to finish.
