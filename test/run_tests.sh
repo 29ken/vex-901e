@@ -1,7 +1,8 @@
 #!/bin/bash
-# Runs the off-robot checks on this computer: the lift's max height logic,
-# then the PID tuner against simulated drivetrains. Rerun after changing
-# src/lift.cpp, include/lift.hpp or src/tuner.cpp.
+# Runs the off-robot checks on this computer: the lift (homing, presets, top
+# and backwards-sensor detection) against a simulated cascade, then the PID
+# tuner against simulated drivetrains. Rerun after changing include/lift.hpp
+# or src/tuner.cpp.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
