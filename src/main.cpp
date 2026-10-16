@@ -26,6 +26,7 @@ void opcontrol() {
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
     pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT});
+    pros::Motor intake(INTAKE);
     pros::adi::DigitalOut wrist ('A');
     bool wrist_retracted = false;
     pros::adi::DigitalOut claw ('B');
@@ -43,16 +44,25 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift control with R1 and R2
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        // 2. Lift control: R2 up, R1 down
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             lift.move(127);       // Move UP
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
             lift.move(-127);      // Move DOWN
         } else {
             lift.move(0);         // Hold still
         }
 
-        // 3. Piston control with A button. new_press only fires once per
+        // 3. Intake: hold B to pull in, Y to push out
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
+            intake.move(127);
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
+            intake.move(-127);
+        } else {
+            intake.move(0);
+        }
+
+        // 4. Piston control with A button. new_press only fires once per
         // press, so holding A can't toggle it over and over.
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             wrist_retracted = !wrist_retracted;
