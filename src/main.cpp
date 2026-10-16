@@ -2,6 +2,7 @@
 #include "drivetrain.hpp"
 #include "controls.hpp"
 #include "autons.hpp"
+#include "config.hpp"
 #include "pros/adi.hpp"
 #include "tuner.hpp"
 #include "screens.hpp"
@@ -24,7 +25,7 @@ void opcontrol() {
 
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
-    pros::MotorGroup lift({-16, 17}); // Use -17 if one motor lifts backwards
+    pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT});
     pros::adi::DigitalOut wrist ('A');
     bool wrist_retracted = false;
     pros::adi::DigitalOut claw ('B');
