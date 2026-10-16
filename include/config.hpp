@@ -8,6 +8,10 @@ inline constexpr std::int8_t RIGHT_11W_A = 1;
 inline constexpr std::int8_t RIGHT_5W    = 2;
 inline constexpr std::int8_t RIGHT_11W_B = 3;
 
+// constants for ports 16 and 17: Cascade
+inline constexpr std::int8_t LIFT_MOTOR_A = 16;
+inline constexpr std::int8_t LIFT_MOTOR_B = -17; // Change to 17 if both spin the same way
+
 // Left drive, all mounted backwards
 inline constexpr std::int8_t LEFT_5W    = -11;
 inline constexpr std::int8_t LEFT_11W_A = -12;
