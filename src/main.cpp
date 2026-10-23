@@ -30,8 +30,9 @@ void opcontrol() {
     pros::Motor intake(INTAKE);
     pros::adi::DigitalOut wrist ('A');
     bool wrist_retracted = false;
-    pros::adi::DigitalOut claw ('B');
+    pros::adi::DigitalOut claw ('C');
     bool claw_extended = false;
+    pros::Distance distance_sensor(1); //<-- port for distance sensor
     
 
     applyDriverBrakes();
@@ -52,8 +53,8 @@ void opcontrol() {
         } else {
             liftManual(0);
         }
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) liftNextPreset();
-        liftDownButton(master.get_digital(pros::E_CONTROLLER_DIGITAL_L2));
+        // if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) liftNextPreset();
+        // liftDownButton(master.get_digital(pros::E_CONTROLLER_DIGITAL_L2));
 
         // 3. Intake: hold B to pull in, Y to push out
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
@@ -74,6 +75,29 @@ void opcontrol() {
             claw.set_value(claw_extended);
         }
 
+        //5. Distance sensor. Autograb if the distance sensor reads less than 50mm. 
+        // The autograb is initated when the distance is less than 51mm, which is 2 inches.
+        int distance_mm = distance_sensor.get();
+        if (distance_mm > 0 && distance_mm < 51) { 
+            if (!claw_extended) {
+                claw_extended = true;
+                claw.set_value(claw_extended);
+            }
+
+        }
         pros::delay(10); // Keep just this one delay at the bottom
+
+
+
     }
+
+            // Manual override: Button A toggles wrist + claw
+    if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+    
+            claw_extended = !claw_extended;   
+            claw.set_value(claw_extended);   
+        }
 }
+
+
+
