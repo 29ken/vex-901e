@@ -75,6 +75,12 @@ void opcontrol() {
             claw.set_value(claw_extended);
         }
 
+        // Claw on its own with L1 (temporary, for testing the claw).
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+            claw_extended = !claw_extended;
+            claw.set_value(claw_extended);
+        }
+
         //5. Distance sensor. Autograb if the distance sensor reads less than 50mm. 
         // The autograb is initated when the distance is less than 51mm, which is 2 inches.
         int distance_mm = distance_sensor.get();
@@ -86,17 +92,7 @@ void opcontrol() {
 
         }
         pros::delay(10); // Keep just this one delay at the bottom
-
-
-
     }
-
-            // Manual override: Button A toggles wrist + claw
-    if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-    
-            claw_extended = !claw_extended;   
-            claw.set_value(claw_extended);   
-        }
 }
 
 
