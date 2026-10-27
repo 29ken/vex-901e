@@ -28,10 +28,11 @@ void opcontrol() {
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
     pros::Motor intake(INTAKE);
-    pros::adi::DigitalOut wrist ('A');
-    bool wrist_retracted = false;
+    pros::adi::DigitalOut wrist ('A', true);
+    bool wrist_retracted = true;
     pros::adi::DigitalOut claw ('C');
-    bool claw_extended = false;
+    bool claw_closed = false;
+    bool claw_armed = false;  // waiting for the distance sensor to see something
     pros::Distance distance_sensor(1); //<-- port for distance sensor
     bool auto_lowering = false;  // this R2 press was handed to liftDown()
 
@@ -70,32 +71,33 @@ void opcontrol() {
             intake.move(0);
         }
 
-        // 4. Piston control with A button. new_press only fires once per
-        // press, so holding A can't toggle it over and over.
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+        // 4. Wrist: L2 flips it. It starts retracted. new_press only fires once
+        // per press, so holding the button can't toggle it over and over.
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
             wrist_retracted = !wrist_retracted;
             wrist.set_value(wrist_retracted);
-
-            claw_extended = !claw_extended;
-            claw.set_value(claw_extended);
         }
 
-        // Claw on its own with L1 (temporary, for testing the claw).
+        // 5. Claw on L1. It starts open. First press turns on the distance
+        // sensor, and the claw closes by itself once something is closer than
+        // 51 mm (2 inches). Once it's closed, L1 opens it. Pressing L1 while
+        // it's still waiting closes it by hand, in case the sensor misses.
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-            claw_extended = !claw_extended;
-            claw.set_value(claw_extended);
-        }
-
-        //5. Distance sensor. Autograb if the distance sensor reads less than 50mm. 
-        // The autograb is initated when the distance is less than 51mm, which is 2 inches.
-        int distance_mm = distance_sensor.get();
-        if (distance_mm > 0 && distance_mm < 51) { 
-            if (!claw_extended) {
-                claw_extended = true;
-                claw.set_value(claw_extended);
+            if (claw_closed) {
+                claw_closed = false;
+            } else if (claw_armed) {
+                claw_closed = true;
+                claw_armed = false;
+            } else {
+                claw_armed = true;
             }
-
         }
+        int distance_mm = distance_sensor.get();
+        if (claw_armed && distance_mm > 0 && distance_mm < 51) {
+            claw_closed = true;
+            claw_armed = false;
+        }
+        claw.set_value(claw_closed);  // if the claw opens when it should close, make this !claw_closed
         pros::delay(10); // Keep just this one delay at the bottom
     }
 }
