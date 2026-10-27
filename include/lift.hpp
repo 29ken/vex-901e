@@ -15,8 +15,9 @@ void initLift();
 void liftManual(int power);
 // Goes to the next preset height above where the lift is, or is already headed.
 void liftNextPreset();
-// Goes down to height 0 and stops there.
-void liftDown();
+// Goes down to height 0 and stops there. False if it can't (no sensor, not
+// zeroed, or already at the bottom), so the caller can lower by hand instead.
+bool liftDown();
 // The L2 button, called every loop with whether it's held. A tap is
 // liftDown(). Holding it lowers the lift slowly past height 0; let go when it
 // touches the bottom and that becomes the new 0. Use it if the program was
@@ -145,8 +146,10 @@ struct LiftControl {
         }
     }
 
-    void down(double raw, std::uint32_t now) {
-        if (zeroed && !backwards && height(raw) > LIFT_BOTTOM) driveTo(0, raw, now);
+    bool down(double raw, std::uint32_t now) {
+        if (!zeroed || backwards || height(raw) <= LIFT_BOTTOM) return false;
+        driveTo(0, raw, now);
+        return true;
     }
 
     void downButton(bool held, double raw, std::uint32_t now) {
