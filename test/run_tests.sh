@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs the off-robot checks on this computer: the lift (presets, bottom limit,
-# re-zeroing, top and backwards-sensor detection) against a simulated winch, then the PID
+# re-zeroing, backwards-sensor detection) against a simulated winch, then the PID
 # tuner against simulated drivetrains. Rerun after changing include/lift.hpp
 # or src/tuner.cpp.
 set -euo pipefail

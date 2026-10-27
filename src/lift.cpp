@@ -16,7 +16,7 @@ static bool readSensor(double& raw) {
 }
 
 static void loop() {
-    bool saidTop = false, saidBackwards = false, saidMissing = false;
+    bool saidBackwards = false, saidMissing = false;
     double lastZero = control.zero;
     while (true) {
         double raw;
@@ -25,18 +25,13 @@ static void loop() {
         {
             std::lock_guard<pros::Mutex> hold(mutex);
             if (ok) {
-                power = control.update(raw, lift.get_actual_velocity(),
-                                       !pros::competition::is_disabled(), pros::millis());
+                power = control.update(raw, !pros::competition::is_disabled(), pros::millis());
             } else {
                 // No sensor: presets and the bottom limit can't work, but hand control still does.
                 if (control.mode != LiftControl::MANUAL) control.mode = LiftControl::IDLE;
                 power = control.mode == LiftControl::MANUAL ? control.manualPower : 0;
             }
 
-            if (control.top.found && !saidTop) {
-                std::printf("Lift top found at %.0f\n", control.height(control.top.position));
-                saidTop = true;
-            }
             if (control.zeroed && control.zero != lastZero) {
                 std::printf("Lift re-zeroed\n");
                 lastZero = control.zero;

@@ -13,22 +13,28 @@ inline constexpr std::int8_t LEFT_5W    = -20;
 inline constexpr std::int8_t LEFT_11W_A = -19;
 inline constexpr std::int8_t LEFT_11W_B = -18;
 
-// Cascade lift. If the two sides fight each other, flip the sign on one. If
-// R1 lowers the lift instead of raising it, flip both.
-inline constexpr std::int8_t LIFT_LEFT  = -17;
-inline constexpr std::int8_t LIFT_RIGHT = 5;
+// Cascade lift. If the two sides fight each other, flip the sign on one.
+inline constexpr std::int8_t LIFT_LEFT  = 17;
+inline constexpr std::int8_t LIFT_RIGHT = -5;
 
 // Rotation sensor on the lift. Raising the lift should make "Lift" on the
 // brain screen go up; if it goes down, make this -4.
 inline constexpr std::int8_t LIFT_SENSOR = 4;
 
 // L1 steps up through these heights, lowest first, in sensor degrees above
-// the bottom. To find one: raise the lift with R2 until it lines up with the
+// the bottom. To find one: raise the lift with R1 until it lines up with the
 // pin or cone, then read "Lift" on the brain screen.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
 
 // Intake. If B pushes out instead of pulling in, make this -16.
 inline constexpr std::int8_t INTAKE = 16;
+
+// Distance sensor on the claw. Once L1 arms it, the claw closes when something
+// is closer than CLAW_GRAB_MM. The bottom line of the brain screen shows what
+// it reads. If it says nothing is on this port, find the sensor's port on the
+// brain's Devices screen and put it here and in main.cpp's distance_sensor.
+inline constexpr std::int8_t CLAW_DISTANCE = 1;
+inline constexpr int CLAW_GRAB_MM = 51;  // 2 inches
 
 // Port 15 is the radio.
 

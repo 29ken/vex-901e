@@ -52,55 +52,16 @@ inline constexpr int LIFT_REZERO_POWER = 30;
 inline constexpr double LIFT_WRONG_WAY = 20;
 inline constexpr int LIFT_WRONG_WAY_POWER = 80;
 
-// The top is a real hard stop. Pushing at near-full power but barely turning
-// for this long means it's there; part power doesn't count, so a heavy load
-// hanging still mid-air isn't mistaken for the top.
-inline constexpr int LIFT_TOP_STALL_POWER = 100;
-inline constexpr double LIFT_STALL_RPM = 5;
-inline constexpr std::uint32_t LIFT_STALL_MS = 250;
-
-// Near either end, slow down instead of slamming into it.
+// Near the bottom, slow down instead of slamming into it.
 inline constexpr double LIFT_SLOW_ZONE = 120;
-inline constexpr double LIFT_TOP_MARGIN = 15;     // stop this far under the learned top
 inline constexpr int LIFT_SLOW_POWER = 40;
 
 // Everything below is the lift's logic, kept apart from the motors so
 // test/lift_check.cpp can run it against a simulated winch.
 
-// Learns where the top is from the first full-power stall going up, then slows
-// near it and stops just under it. Works in raw sensor degrees, so re-zeroing
-// doesn't move it.
-// ponytail: the first stall wins, so a snag on the way up becomes the top until
-// the program restarts. Add a re-learn button if that bites.
-struct LiftTop {
-    bool found = false;
-    double position = 0;
-    std::uint32_t stalledSince = 0;
-
-    int limit(int power, double raw, double rpm, std::uint32_t now) {
-        if (power <= 0) {
-            stalledSince = 0;
-            return power;
-        }
-        if (found) {
-            double left = position - raw;
-            if (left <= LIFT_TOP_MARGIN) return 0;
-            if (left < LIFT_SLOW_ZONE) return std::min(power, LIFT_SLOW_POWER);
-            return power;
-        }
-        if (power < LIFT_TOP_STALL_POWER || std::fabs(rpm) > LIFT_STALL_RPM) {
-            stalledSince = 0;
-            return power;
-        }
-        if (!stalledSince) stalledSince = now;
-        if (now - stalledSince >= LIFT_STALL_MS) {
-            found = true;
-            position = raw;
-            return 0;  // stop grinding into the stop
-        }
-        return power;
-    }
-};
+// ponytail: nothing limits the top. Holding R1 pushes for as long as it's held,
+// so let go once it's up; it used to learn the top from a stall, but any snag
+// on the way became the top until restart.
 
 struct LiftControl {
     enum Mode { IDLE, MANUAL, TARGET, REZERO };
@@ -116,7 +77,6 @@ struct LiftControl {
     std::uint32_t startTime = 0;
     bool downHeld = false;
     std::uint32_t downSince = 0;
-    LiftTop top;
 
     double height(double raw) const { return raw - zero; }
 
@@ -170,7 +130,7 @@ struct LiftControl {
 
     // Returns the power to send. While the robot is disabled the motors ignore
     // commands, so a pending move just waits.
-    int update(double raw, double rpm, bool enabled, std::uint32_t now) {
+    int update(double raw, bool enabled, std::uint32_t now) {
         if (!enabled) {
             begin(mode, raw, now);
             return 0;
@@ -179,7 +139,7 @@ struct LiftControl {
             case IDLE:
                 return 0;
             case MANUAL:
-                return bottomLimit(top.limit(manualPower, raw, rpm, now), raw);
+                return bottomLimit(manualPower, raw);
             case REZERO:
                 return -LIFT_REZERO_POWER;  // the driver decides where the bottom is
             case TARGET: {
@@ -202,8 +162,8 @@ struct LiftControl {
                 } else if (wentWrongWay(raw, error > 0 ? 1 : -1)) {
                     return 0;
                 }
-                int out = bottomLimit(top.limit(static_cast<int>(power), raw, rpm, now), raw);
-                if (out == 0) mode = IDLE;  // reached the top or the bottom limit first
+                int out = bottomLimit(static_cast<int>(power), raw);
+                if (out == 0) mode = IDLE;  // reached the bottom limit first
                 return out;
             }
         }
