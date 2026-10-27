@@ -198,6 +198,23 @@ static void too_heavy_stops_short_and_says_so() {
     std::printf("  too heavy: gave up %.0f short, no false top or backwards flag\n", s.c.stoppedShort);
 }
 
+// With the wrist up, R1 calls down(): from however high it was raised by hand,
+// all the way to the bottom. When down() says it can't, R1 lowers by hand.
+static void r1_tap_from_any_height() {
+    Sim s = zeroedAtBottom();
+    s.c.manual(127);
+    s.run(1200);
+    s.c.manual(0);
+    double from = s.liftHeight();
+    assert(s.c.down(s.raw(), s.now));
+    s.run(4000);
+    assert(s.neverUnwoundPastBottom() && s.liftHeight() <= LIFT_BOTTOM + 3);
+    std::printf("  R1 tap from %.0f (raised by hand): stopped %.1f above the bottom\n", from, s.liftHeight());
+    assert(!s.c.down(s.raw(), s.now));  // already at the bottom
+    Sim u;                              // never zeroed
+    assert(!u.c.down(u.raw(), u.now));
+}
+
 static void backwards_sensor_is_caught() {
     Sim s;
     s.sign = -1;
@@ -219,6 +236,7 @@ int main() {
     rezero_when_started_with_the_lift_up();
     preset_above_the_top();
     too_heavy_stops_short_and_says_so();
+    r1_tap_from_any_height();
     backwards_sensor_is_caught();
     std::puts("lift check passes");
 }

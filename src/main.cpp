@@ -33,7 +33,8 @@ void opcontrol() {
     pros::adi::DigitalOut claw ('C');
     bool claw_extended = false;
     pros::Distance distance_sensor(1); //<-- port for distance sensor
-    
+    bool auto_lowering = false;  // this R1 press was handed to liftDown()
+
 
     applyDriverBrakes();
 
@@ -44,11 +45,16 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift: R2 up and R1 down by hand. L1 steps up through the preset
-        // heights. Tap L2 to go to the bottom; hold it to re-zero (see lift.hpp).
+        // 2. Lift: R2 up and R1 down by hand. The bottom is wherever the lift
+        // was when the program started. With the wrist up, one tap of R1 takes
+        // the lift all the way down on its own (R2 stops it partway).
+        bool wrist_up = wrist_retracted;  // if this is backwards on the robot, make it !wrist_retracted
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+            auto_lowering = wrist_up && liftDown();
+        }
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             liftManual(127);
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && !auto_lowering) {
             liftManual(-127);
         } else {
             liftManual(0);

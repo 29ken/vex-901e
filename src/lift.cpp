@@ -86,11 +86,11 @@ void liftNextPreset() {
     control.nextPreset(raw, pros::millis());
 }
 
-void liftDown() {
+bool liftDown() {
     double raw;
-    if (!readSensor(raw)) return;
+    if (!readSensor(raw)) return false;
     std::lock_guard<pros::Mutex> hold(mutex);
-    control.down(raw, pros::millis());
+    return control.down(raw, pros::millis());
 }
 
 void liftDownButton(bool held) {
