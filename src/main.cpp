@@ -28,9 +28,9 @@ void opcontrol() {
  
     pros::Controller master(pros::E_CONTROLLER_MASTER);
     pros::Motor intake(INTAKE);
-    pros::adi::DigitalOut wrist ('A', true);
+    pros::adi::DigitalOut wrist ('C', true);
     bool wrist_retracted = true;
-    pros::adi::DigitalOut claw ('C');
+    pros::adi::DigitalOut claw ('B');
     bool claw_closed = false;
     bool claw_armed = false;  // waiting for the distance sensor to see something
     pros::Distance distance_sensor(1); //<-- port for distance sensor
