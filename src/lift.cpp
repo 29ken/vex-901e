@@ -68,7 +68,7 @@ void initLift() {
     if (readSensor(raw)) {
         control.setZero(raw);
     } else {
-        std::printf("Lift sensor on port %d not found at startup; hold L2 to zero the lift\n",
+        std::printf("Lift sensor on port %d not found at startup; restart with the lift down\n",
                     std::abs(LIFT_SENSOR));
     }
     pros::Task task(loop, "Lift");
