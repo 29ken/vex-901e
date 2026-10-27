@@ -33,7 +33,7 @@ void opcontrol() {
     pros::adi::DigitalOut claw ('C');
     bool claw_extended = false;
     pros::Distance distance_sensor(1); //<-- port for distance sensor
-    bool auto_lowering = false;  // this R1 press was handed to liftDown()
+    bool auto_lowering = false;  // this R2 press was handed to liftDown()
 
 
     applyDriverBrakes();
@@ -45,22 +45,21 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift: R2 up and R1 down by hand. The bottom is wherever the lift
-        // was when the program started. With the wrist up, one tap of R1 takes
-        // the lift all the way down on its own (R2 stops it partway).
+        // 2. Lift: hold R1 to raise it. The bottom is wherever the lift was
+        // when the program started. With the wrist up, one tap of R2 takes the
+        // lift all the way down on its own (R1 stops it partway); with the
+        // wrist down, R2 lowers it only while held.
         bool wrist_up = wrist_retracted;  // if this is backwards on the robot, make it !wrist_retracted
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2)) {
             auto_lowering = wrist_up && liftDown();
         }
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
             liftManual(127);
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1) && !auto_lowering) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2) && !auto_lowering) {
             liftManual(-127);
         } else {
             liftManual(0);
         }
-        // if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) liftNextPreset();
-        // liftDownButton(master.get_digital(pros::E_CONTROLLER_DIGITAL_L2));
 
         // 3. Intake: hold B to pull in, Y to push out
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
