@@ -22,7 +22,7 @@ inline constexpr std::int8_t LIFT_RIGHT = -5;
 inline constexpr std::int8_t LIFT_SENSOR = 4;
 
 // L1 steps up through these heights, lowest first, in sensor degrees above
-// the bottom. To find one: raise the lift with R2 until it lines up with the
+// the bottom. To find one: raise the lift with R1 until it lines up with the
 // pin or cone, then read "Lift" on the brain screen.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
 
