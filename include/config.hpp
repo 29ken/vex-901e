@@ -13,10 +13,9 @@ inline constexpr std::int8_t LEFT_5W    = -20;
 inline constexpr std::int8_t LEFT_11W_A = -19;
 inline constexpr std::int8_t LEFT_11W_B = -18;
 
-// Cascade lift. If the two sides fight each other, flip the sign on one. If
-// R1 lowers the lift instead of raising it, flip both.
-inline constexpr std::int8_t LIFT_LEFT  = -17;
-inline constexpr std::int8_t LIFT_RIGHT = 5;
+// Cascade lift. If the two sides fight each other, flip the sign on one.
+inline constexpr std::int8_t LIFT_LEFT  = 17;
+inline constexpr std::int8_t LIFT_RIGHT = -5;
 
 // Rotation sensor on the lift. Raising the lift should make "Lift" on the
 // brain screen go up; if it goes down, make this -4.
