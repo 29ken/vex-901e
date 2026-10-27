@@ -19,11 +19,10 @@ struct Sim {
     LiftControl c;
 
     double raw() const { return sign * spool; }
-    double rpm() const { return w / 6; }
     double liftHeight() const { return std::fabs(spool - spool0); }  // what the lift really does
 
     void step() {
-        int power = c.update(raw(), rpm(), enabled, now);
+        int power = c.update(raw(), enabled, now);
         if (!enabled) power = 0;
         if (power == 0) {
             w *= 0.5;  // hold brake
@@ -56,24 +55,6 @@ static Sim zeroedAtBottom() {
     Sim s;
     s.c.setZero(s.raw());  // what initLift() does at power-on
     return s;
-}
-
-static void lifttop_basics() {
-    LiftTop top;
-    assert(top.limit(127, 0, 0, 1000) == 127);        // from rest reads 0 rpm for a moment
-    assert(top.limit(127, 5, 2, 1100) == 127);
-    assert(top.limit(127, 40, 150, 1150) == 127);
-    assert(top.limit(-127, 40, 0, 2000) == -127);     // going down never stalls the top
-    assert(top.limit(60, 40, 0, 2100) == 60);         // part-power holds aren't a stall either
-    assert(top.limit(60, 40, 0, 2600) == 60);
-    assert(!top.found);
-    assert(top.limit(127, 900, 1, 3000) == 127);
-    assert(top.limit(127, 900, 1, 3000 + LIFT_STALL_MS) == 0);
-    assert(top.found && top.position == 900);
-    assert(top.limit(127, 100, 150, 5000) == 127);
-    assert(top.limit(127, 900 - LIFT_SLOW_ZONE + 1, 150, 5010) == LIFT_SLOW_POWER);
-    assert(top.limit(127, 900 - LIFT_TOP_MARGIN, 30, 5020) == 0);
-    assert(top.limit(-127, 900, 0, 5040) == -127);
 }
 
 static void presets_and_the_bottom_limit() {
@@ -162,19 +143,8 @@ static void rezero_when_started_with_the_lift_up() {
 }
 
 static void preset_above_the_top() {
-    // Hits the top while pushing hard: learns it and stops right there.
-    Sim s = zeroedAtBottom();
-    s.travel = 650;
-    for (int i = 0; i < 3; i++) {
-        s.c.nextPreset(s.raw(), s.now);
-        s.run(3000);
-    }
-    assert(s.c.top.found && s.c.mode == LiftControl::IDLE);
-    assert(s.c.update(s.raw(), s.rpm(), true, s.now) == 0);  // not grinding
-    std::printf("  preset far above the top: learned it at %.0f and stopped\n", s.height());
-
-    // Reaches the top only a little short of the preset, pushing gently: gives
-    // up after the timeout and says why, without blaming the sensor.
+    // Reaches the top short of the preset: gives up after the timeout and says
+    // why, without blaming the sensor.
     Sim t = zeroedAtBottom();
     t.travel = 750;
     for (int i = 0; i < 3; i++) {
@@ -194,8 +164,24 @@ static void too_heavy_stops_short_and_says_so() {
     s.run(LIFT_MOVE_TIMEOUT_MS + 500);
     // It gives up and says so, without inventing a top or blaming the sensor.
     assert(s.c.mode == LiftControl::IDLE && s.c.stoppedShort > 0);
-    assert(!s.c.top.found && !s.c.backwards && s.neverUnwoundPastBottom());
-    std::printf("  too heavy: gave up %.0f short, no false top or backwards flag\n", s.c.stoppedShort);
+    assert(!s.c.backwards && s.neverUnwoundPastBottom());
+    std::printf("  too heavy: gave up %.0f short, no backwards flag\n", s.c.stoppedShort);
+}
+
+// Something in the way on the way up (a snag, or pushing a cone into a pin)
+// must never stop later presses from going higher once it's clear.
+static void snag_never_limits_later_presses() {
+    Sim s = zeroedAtBottom();
+    s.travel = 400;  // stuck here for a moment
+    s.c.manual(127);
+    s.run(1000);
+    s.c.manual(0);
+    s.travel = 1500;  // cleared
+    s.c.manual(127);
+    s.run(2500);
+    s.c.manual(0);
+    assert(s.liftHeight() > 1000);
+    std::printf("  stuck at 400, then cleared: R1 kept going to %.0f\n", s.liftHeight());
 }
 
 // With the wrist up, R1 calls down(): from however high it was raised by hand,
@@ -231,12 +217,12 @@ static void backwards_sensor_is_caught() {
 }
 
 int main() {
-    lifttop_basics();
     presets_and_the_bottom_limit();
     rezero_when_started_with_the_lift_up();
     preset_above_the_top();
     too_heavy_stops_short_and_says_so();
     r1_tap_from_any_height();
+    snag_never_limits_later_presses();
     backwards_sensor_is_caught();
     std::puts("lift check passes");
 }
