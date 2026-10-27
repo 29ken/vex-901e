@@ -7,6 +7,8 @@
 #include "tuner.hpp"
 #include <cstdio>
 
+static pros::Distance clawSensor(CLAW_DISTANCE);
+
 static void printSide(int line, const char* label, pros::MotorGroup& motors) {
     char row[48];
     int n = std::snprintf(row, sizeof(row), "%s", label);
@@ -53,6 +55,14 @@ static void draw() {
     if (turnTune.ok || moveTune.ok) {
         pros::lcd::print(7, "PID T %.3g/%.2g/%.3g  M %.3g/%.2g/%.3g",
                          turnTune.kP, turnTune.kI, turnTune.kD, moveTune.kP, moveTune.kI, moveTune.kD);
+    } else {
+        // Hold something in the claw: this should read under CLAW_GRAB_MM.
+        std::int32_t mm = clawSensor.get();
+        if (mm == PROS_ERR) {
+            pros::lcd::print(7, "Claw sensor: nothing on port %d", CLAW_DISTANCE);
+        } else {
+            pros::lcd::print(7, "Claw sensor %d mm (grabs under %d)", mm, CLAW_GRAB_MM);
+        }
     }
 }
 

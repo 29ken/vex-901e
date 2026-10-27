@@ -29,6 +29,13 @@ inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
 // Intake. If B pushes out instead of pulling in, make this -16.
 inline constexpr std::int8_t INTAKE = 16;
 
+// Distance sensor on the claw. Once L1 arms it, the claw closes when something
+// is closer than CLAW_GRAB_MM. The bottom line of the brain screen shows what
+// it reads. If it says nothing is on this port, find the sensor's port on the
+// brain's Devices screen and put it here and in main.cpp's distance_sensor.
+inline constexpr std::int8_t CLAW_DISTANCE = 1;
+inline constexpr int CLAW_GRAB_MM = 51;  // 2 inches
+
 // Port 15 is the radio.
 
 // "Cal turn" and "Cal dist" in the controller menu measure the real values
