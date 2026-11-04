@@ -7,6 +7,8 @@ const Auton autons[] = {
     {"None", none},
     {"Red Left", redLeft5pin},
     {"Red Right", redRight},
+    {"Red Right 2pin", redRight2pin},
+    {"Red Left 4pin", redLeft4pin},
     {"Blue Left", blueLeft},
     {"Blue Right", blueRight},
     {"Skills", skills},
