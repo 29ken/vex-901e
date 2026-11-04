@@ -4,6 +4,7 @@
 #include "autons.hpp"
 #include "config.hpp"
 #include "lift.hpp"
+#include "pto.hpp"
 #include "pros/adi.hpp"
 #include "pros/misc.h"
 #include "tuner.hpp"
@@ -11,6 +12,7 @@
 
 void initialize() {
     initDrive();
+    initPto();
     initLift();
     startBrainScreen();
     startControllerScreen();
@@ -28,7 +30,6 @@ void autonomous() {
 void opcontrol() {
 
     pros::Controller master(pros::E_CONTROLLER_MASTER);
-    pros::Motor intake(INTAKE);
     pros::adi::DigitalOut wrist('C');
     pros::adi::DigitalOut claw('B');
     pros::Distance distance_sensor(3);
@@ -49,7 +50,8 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift: R2 up, R1 down
+        // 2. Lift: R2 up, R1 down. If the PTO is in INTAKE, it shifts to LIFT
+        // first (~0.35 s), then the cascade moves on all three motors.
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
             liftManual(127);
         } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
@@ -58,13 +60,20 @@ void opcontrol() {
             liftManual(0);
         }
 
-        // 3. Intake: B in, Y out
+        // 3. Intake: B in, Y out. If the PTO is in LIFT, it takes the cascade all
+        // the way down and shifts to INTAKE first, then the intake runs.
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
-            intake.move(127);
+            intakeMove(127);
         } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
-            intake.move(-127);
+            intakeMove(-127);
         } else {
-            intake.move(0);
+            intakeMove(0);
+        }
+
+        // 3b. DOWN: shift the PTO now (INTAKE <-> LIFT). R2 shifts by itself;
+        // DOWN on the way to the goal just saves the ~0.35 s pause when lifting.
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN)) {
+            ptoToggle();
         }
 
         // 4. A: manual toggle of wrist + claw

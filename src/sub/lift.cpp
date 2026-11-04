@@ -1,8 +1,11 @@
 #include "lift.hpp"
+#include "pto.hpp"
 #include <cstdio>
 #include <mutex>
 
-pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT});
+// Red 100 rpm cartridges, as in the CAD. The PTO compares these motors' speed
+// with the intake motor's, so all three have to be set the same.
+pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT}, pros::MotorGearset::red);
 static pros::Rotation sensor(LIFT_SENSOR);
 
 // The driver loop sends commands while the lift task runs the control.
@@ -15,23 +18,43 @@ static bool readSensor(double& raw) {
     return centidegrees != PROS_ERR;
 }
 
+// The lift motors' speed, + is up. They're geared together, so either one's
+// reading will do; this keeps working with one of them unplugged.
+static double liftRpm() {
+    for (double rpm : lift.get_actual_velocity_all()) {
+        if (std::isfinite(rpm)) return rpm;
+    }
+    return PROS_ERR_F;
+}
+
 static void loop() {
     bool saidTop = false, saidBackwards = false, saidMissing = false;
     double lastZero = control.zero;
     while (true) {
         double raw;
         bool ok = readSensor(raw);
+        // The lift only moves while the PTO's gear is on the winch. Otherwise (in
+        // INTAKE, or mid-shift) it's held still, and R1/R2 make the PTO shift to LIFT.
+        bool ptoHolds = ptoHoldingLift();
+        bool disabled = pros::competition::is_disabled();
+        double rpm = liftRpm();
+        PtoLiftTick tick;
         int power;
         {
             std::lock_guard<pros::Mutex> hold(mutex);
+            // R1/R2 held at the buzzer doesn't carry into the next period. Preset
+            // moves still wait out the disable.
+            if (disabled) control.manual(0);
             if (ok) {
-                power = control.update(raw, lift.get_actual_velocity(),
-                                       !pros::competition::is_disabled(), pros::millis());
+                power = control.update(raw, rpm, !ptoHolds && !disabled, pros::millis());
             } else {
                 // No sensor: presets and the bottom limit can't work, but hand control still does.
                 if (control.mode != LiftControl::MANUAL) control.mode = LiftControl::IDLE;
-                power = control.mode == LiftControl::MANUAL ? control.manualPower : 0;
+                power = control.mode == LiftControl::MANUAL && !ptoHolds ? control.manualPower : 0;
             }
+            tick.ask = control.ask();
+            tick.heightKnown = ok && control.zeroed && !control.backwards;
+            tick.height = tick.heightKnown ? control.height(raw) : 0;
 
             if (control.top.found && !saidTop) {
                 std::printf("Lift top found at %.0f\n", control.height(control.top.position));
@@ -57,6 +80,21 @@ static void loop() {
             }
         }
         lift.move(power);
+
+        // The PTO runs in the same tick, so in LIFT the intake motor gets the same
+        // power. Before shifting to INTAKE it has the cascade taken to the bottom.
+        tick.power = power;
+        tick.held = ptoHolds;
+        tick.rpm = rpm;
+        bool lower = ptoStep(tick);
+        if (ok) {
+            std::lock_guard<pros::Mutex> hold(mutex);
+            if (lower) {
+                control.lowerForPto(raw, rpm, pros::millis());
+            } else {
+                control.endPtoTrip();
+            }
+        }
         pros::delay(10);
     }
 }
