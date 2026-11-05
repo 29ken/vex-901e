@@ -3,15 +3,16 @@
 // a moment to slide the gear over, teeth that can land tooth-on-tooth, speed
 // readings that lag the real speed, and an intake motor that's locked to the
 // winch once its gear is on it. Each tick runs like the robot: the driver loop
-// calls liftManual() and intakeMove(), then the lift task reads
-// ptoHoldingLift(), updates the lift, runs the PTO, and starts a trip down if
-// the PTO asks. The lift slows down when held about as fast as it speeds up,
-// not instantly. Tests end with checks(): the intake motor never pushed against
-// the lift motors (its slow turn during a shift, against the held lift, is on
-// purpose and not counted), never ran the intake with its gear on the winch,
-// the cascade never rose in INTAKE, the piston only moved with everything
-// still, never toward INTAKE with the cascade up, and the lift never decided
-// its sensor was backwards. Run test/run_tests.sh.
+// calls liftManual() and intakeMove() and acts on ptoClawReady() (before or
+// after the lift task), then the lift task reads ptoLiftHold(), updates the
+// lift, runs the PTO and starts or ends the PTO's move to clamp height. The
+// lift slows down when held about as fast as it speeds up, not instantly. Tests
+// end with checks(): the intake motor never pushed against the lift motors (its
+// slow turn during a shift, against the held lift, is on purpose and not
+// counted), never ran the intake with its gear on the winch, the cascade never
+// moved in INTAKE except on its way to clamp height, the piston only moved with
+// everything still, and the lift never decided its sensor was backwards. Run
+// test/run_tests.sh.
 #include "pto.hpp"
 #include <cassert>
 #include <cstdio>
@@ -68,14 +69,16 @@ struct Sim {
     // What happened
     int fights = 0;            // ticks the intake motor pushed against the lift motors
     int intakeOnWinch = 0;     // ticks the intake motor ran for the intake with its gear on the winch
-    int risesInIntake = 0;     // ticks the cascade rose with the PTO settled in INTAKE
+    int movesInIntake = 0;     // ticks the lift was sent power in INTAKE, other than to clamp height
+    int clawReadies = 0;       // times the driver loop got the claw ready
+    bool wristDown = false, clawOpen = true, autograbArmed = false;
     int pistonMoves = 0;
-    int bounces = 0;           // times it had to go back down while stopping to shift
     double fastestAtFire = 0;  // fastest anything was really turning when the piston moved
-    double highestToIntake = 0;  // highest the cascade was when the piston moved to INTAKE
     double highestEver = 0;
     std::uint32_t liftMovedAt = 0;  // last time the lift was sent power
     std::uint32_t firedAt = 0;
+    std::uint32_t shortestGapAtFire = 0xffffffffu;  // least time from lift power to a piston move
+    std::uint32_t lastGapAtFire = 0;
     unsigned seed = 1;
 
     Sim() { lc.setZero(0); }  // what initLift() does: matches start with the cascade down
@@ -87,6 +90,12 @@ struct Sim {
 
     void driverLoop() {
         if (enabled) lc.manual(liftCmd);
+        if (enabled && c.clampReady != clawReadies) {  // ptoClawReady()
+            clawReadies = c.clampReady;
+            wristDown = true;
+            clawOpen = true;
+            autograbArmed = true;
+        }
         if (downPress) {
             c.shift(c.target == PtoMode::LIFT ? PtoMode::INTAKE : PtoMode::LIFT);
             downPress = false;
@@ -106,16 +115,18 @@ struct Sim {
         // The lift task, as in lift.cpp.
         bool ok = !sensorBroken && now != glitchAt;
         double raw = height + heightNoise * rnd();  // what the lift sensor reads
-        bool held = !c.liftFree();  // ptoHoldingLift()
+        PtoLiftHold hold = c.liftHold();  // ptoLiftHold()
+        bool held = hold == PtoLiftHold::HELD;
         double liftRead = reading(liftSeen, liftW), ptoRead = reading(ptoSeen, ptoW);
         double liftRpm = liftUnplugged ? PROS_ERR_F : liftRead;
         if (!enabled) lc.manual(0);
         int power;
         if (ok) {
-            power = lc.update(raw, liftRpm, !held && enabled, now);
+            bool mayMove = hold == PtoLiftHold::FREE || (hold == PtoLiftHold::PTO_MOVE_ONLY && lc.ptoMove);
+            power = lc.update(raw, liftRpm, mayMove && enabled, now);
         } else {
             if (lc.mode != LiftControl::MANUAL) lc.mode = LiftControl::IDLE;
-            power = lc.mode == LiftControl::MANUAL && !held ? lc.manualPower : 0;
+            power = lc.mode == LiftControl::MANUAL && hold == PtoLiftHold::FREE ? lc.manualPower : 0;
         }
         if (enabled && power != 0) liftMovedAt = now;
         if (shiftMidTick) {
@@ -133,15 +144,13 @@ struct Sim {
         in.intakePower = enabled ? intake : 0;  // pto.cpp drops it while disabled
         in.liftRpm = liftRpm;
         in.ptoRpm = ptoStuck ? stuckRpm : ptoRead;
-        PtoControl::Phase before = c.phase;
         PtoOutput out = c.update(in);
-        if (before == PtoControl::STOPPING && c.phase == PtoControl::LOWERING) bounces++;
         assert(enabled || out.power == 0);
         if (ok) {
-            if (out.lowerLift) {
-                lc.lowerForPto(raw, liftRpm, now);
+            if (out.toClamp) {
+                lc.moveForPto(PTO_CLAMP_HEIGHT, raw, liftRpm, now);
             } else {
-                lc.endPtoTrip();
+                lc.endPtoMove();
             }
         }
         if (driverLate) driverLoop();
@@ -150,8 +159,9 @@ struct Sim {
             pistonSent = out.piston;
             pistonMoves++;
             firedAt = now;
+            lastGapAtFire = now - liftMovedAt;
+            shortestGapAtFire = std::min(shortestGapAtFire, lastGapAtFire);
             fastestAtFire = std::max(fastestAtFire, std::max(std::fabs(liftW), std::fabs(ptoW)));
-            if (out.piston == PtoMode::INTAKE) highestToIntake = std::max(highestToIntake, height);
             if (pistonWorks) {
                 goingTo = out.piston;
                 where = BETWEEN;
@@ -164,7 +174,7 @@ struct Sim {
         bool intakeJob = c.phase == PtoControl::READY && c.target == PtoMode::INTAKE;
         if (where == ON_WINCH && intakeJob && ptoPower != 0) intakeOnWinch++;
         physics(enabled ? power : 0);
-        if (intakeJob && c.settled && liftW > 1) risesInIntake++;
+        if (intakeJob && c.settled && !c.toClamp && enabled && power != 0) movesInIntake++;
         highestEver = std::max(highestEver, height);
         now += 10;
     }
@@ -243,13 +253,13 @@ struct Sim {
 
     void checks() const {
         assert(!lc.backwards);
-        assert(fights == 0 && intakeOnWinch == 0 && risesInIntake == 0);
+        assert(fights == 0 && intakeOnWinch == 0 && movesInIntake == 0);
         assert(fastestAtFire < PTO_STILL_RPM);
-        assert(highestToIntake <= LIFT_BOTTOM + PTO_DOWN_SLACK + PTO_DOWN_HYSTERESIS);
+        assert(shortestGapAtFire >= PTO_SETTLE_MS);
     }
 };
 
-static void starts_in_intake_with_the_cascade_held_down() {
+static void starts_in_intake_with_the_cascade_held() {
     Sim s;
     s.intake = 127;
     s.run(300);
@@ -258,7 +268,7 @@ static void starts_in_intake_with_the_cascade_held_down() {
     s.run(50);
     assert(s.ptoPower == -127 && s.highestEver < 1);
     s.checks();
-    std::printf("  starts in INTAKE: B and Y run the intake, the cascade stays down\n");
+    std::printf("  starts in INTAKE: B and Y run the intake, the cascade stays put\n");
 }
 
 static void r2_shifts_to_lift_then_lifts(int wiring, bool toothOnTooth) {
@@ -270,6 +280,8 @@ static void r2_shifts_to_lift_then_lifts(int wiring, bool toothOnTooth) {
     s.run(500);
     std::uint32_t pressed = s.now;
     s.liftCmd = 127;
+    s.step();
+    assert(s.c.target == PtoMode::LIFT && s.c.phase != PtoControl::READY);  // straight away
     while (s.height < 1) {
         s.step();
         assert(s.now - pressed < 2000);
@@ -297,239 +309,97 @@ static void r2_shifts_to_lift_then_lifts(int wiring, bool toothOnTooth) {
                 static_cast<unsigned>(joined));
 }
 
-static void b_takes_the_cascade_down_then_intakes(int wiring) {
+// B with the cascade up: shifts at once, then the two lift motors take the
+// cascade to clamp height while the intake runs, and the claw gets ready.
+static void b_takes_the_cascade_to_clamp_height(int wiring, double from) {
     Sim s;
     s.wiring = wiring;
-    s.raiseTo(1000);
-    assert(s.c.target == PtoMode::LIFT && s.c.pushing);
-    std::uint32_t pressed = s.now;
-    s.intake = 127;  // B with the cascade up
-    s.step();
-    assert(s.c.phase == PtoControl::LOWERING && s.ptoPower != 127);
-    bool allThreeDown = true;
-    while (s.c.phase == PtoControl::LOWERING) {
-        if (!s.c.pushing) allThreeDown = false;
-        s.step();
+    if (from > 0) {
+        s.raiseTo(from);
+    } else {
+        s.downPress = true;  // into LIFT at the bottom, cascade never moved
+        s.settle();
     }
-    std::uint32_t down = s.now - pressed;
+    assert(s.c.target == PtoMode::LIFT);
+    double h0 = s.height;
+    std::uint32_t pressed = s.now;
+    s.intake = 127;
+    s.step();
+    assert(s.c.target == PtoMode::INTAKE && s.c.phase != PtoControl::READY);
     s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.where == Sim::ON_INTAKE && s.ptoPower == 127);
-    assert(allThreeDown && s.height <= LIFT_BOTTOM + PTO_DOWN_SLACK);
-    assert(s.firedAt - s.liftMovedAt >= PTO_SETTLE_MS);
-    assert(s.lc.mode == LiftControl::IDLE && !s.lc.ptoTrip);  // no trip left waiting in INTAKE
+    std::uint32_t intakeAt = s.now - pressed;
+    assert(s.c.toClamp && s.clawReadies == 0);
+    while (s.c.toClamp && s.now - pressed < 5000) {
+        s.step();
+        if (s.c.phase == PtoControl::READY) assert(s.ptoPower == 127);  // intake keeps running
+    }
+    std::uint32_t readyAt = s.now - pressed;
+    s.step();
+    assert(s.c.clampReady == 1 && s.clawReadies == 1 && s.wristDown && s.clawOpen && s.autograbArmed);
+    assert(std::fabs(s.height - PTO_CLAMP_HEIGHT) <= PTO_CLAMP_SLACK);
+    s.run(200);  // the last of the coast
+    double there = s.height;
+    s.run(1000);
+    assert(std::fabs(s.height - there) < 1 && s.ptoPower == 127 && s.where == Sim::ON_INTAKE);
+    assert(std::fabs(s.height - PTO_CLAMP_HEIGHT) <= PTO_CLAMP_SLACK);
     s.checks();
-    std::printf("  B with the cascade at 1000: down on all three motors in %u ms, intake running "
-                "%u ms after the press, piston moved at height %.1f\n",
-                static_cast<unsigned>(down), static_cast<unsigned>(s.now - pressed),
-                s.highestToIntake);
+    std::printf("  B with the cascade at %.0f, motor %+d raises: intake running at %u ms, cascade "
+                "at clamp height %.0f and claw ready at %u ms\n",
+                h0, wiring, static_cast<unsigned>(intakeAt), there,
+                static_cast<unsigned>(readyAt));
 }
 
-static void r2_on_the_way_down_cancels_and_r1_doesnt() {
+static void r2_on_the_way_to_clamp_height_cancels() {
     Sim s;
     s.raiseTo(1000);
     s.intake = 127;
-    s.run(200);
-    assert(s.c.phase == PtoControl::LOWERING && s.height < 1000);
+    s.settle();
+    s.run(150);
+    assert(s.c.toClamp && s.height < 1000 && s.height > 300);
     s.liftCmd = 127;  // R2: the driver wants it up after all
     s.step();
-    assert(s.c.target == PtoMode::LIFT && s.c.phase == PtoControl::READY);
-    s.run(300);
-    assert(s.liftW > 50 && s.pistonMoves == 1);  // only the first shift, into LIFT
-    s.liftCmd = 0;
+    assert(s.c.target == PtoMode::LIFT && !s.c.toClamp);
+    s.run(1000);
+    assert(s.c.target == PtoMode::LIFT && s.height > 600 && s.clawReadies == 0);
+    s.checks();
+    std::printf("  R2 on the way to clamp height: back to LIFT, the claw is left alone\n");
+}
+
+static void r2_still_held_when_b_is_pressed() {
+    // B was pressed last, so INTAKE wins and the cascade stops where it is. R2
+    // is still held, so it stays there (no rising on two motors) until R2 is let
+    // go, however long that is; then it goes to clamp height.
+    Sim s;
+    s.liftCmd = 127;
+    while (s.height < 600) s.step();
+    s.intake = 127;
+    s.settle();
     s.run(200);
-
-    // B again, then R1 on the way down and let go halfway: it carries on down.
-    s.intake = 0;
-    s.step();
-    s.intake = 127;
-    s.run(100);
-    s.liftCmd = -127;
-    s.run(150);
-    s.liftCmd = 0;
-    assert(s.c.phase == PtoControl::LOWERING && s.height > 100);
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
-    s.checks();
-    std::printf("  R2 on the way down cancels the shift; R1 on the way down doesn't\n");
-}
-
-static void b_while_r2_is_held_waits_for_r2() {
-    // R2 still held when B is pressed: the driver keeps the cascade until letting
-    // go of R2, however long that is, then it comes down and shifts.
-    Sim s;
-    s.raiseTo(400);
-    s.liftCmd = 127;
-    s.run(100);
-    s.intake = 127;
-    s.run(PTO_LOWER_TIMEOUT_MS + 1000);
-    assert(s.c.phase == PtoControl::LOWERING && s.c.target == PtoMode::INTAKE);
-    assert(s.pistonMoves == 1 && s.c.gaveUpLowering == 0 && s.height > 1000);
-    s.liftCmd = 0;
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127 && s.c.gaveUpLowering == 0);
-    s.checks();
-    std::printf("  B with R2 still held: the cascade stays with R2, comes down once it's let go\n");
-}
-
-static void b_then_r2_let_go_while_still_rising(double holdTau, bool sameTick) {
-    // R2 from the bottom, B on the way up, then R2 let go while the cascade is
-    // still rising fast (or B pressed the same tick R2 is let go). It must coast
-    // to a stop before the trip down starts, or the lift's backwards-sensor
-    // check sees it go up while sent down.
-    Sim s;
-    s.holdTau = holdTau;
-    s.liftCmd = 127;
-    while (s.height < 300) s.step();
-    if (!sameTick) {
-        s.intake = 127;
-        while (s.height < 600) s.step();
-    } else {
-        while (s.height < 600) s.step();
-        s.intake = 127;
-    }
-    assert(s.liftW > 50);
-    s.liftCmd = 0;
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127 && s.c.gaveUpLowering == 0);
-    s.checks();
-    std::printf("  B and R2 let go at 600 while rising%s (stop in %.2f s): coasted to %.0f, came "
-                "down, shifted at %.1f\n",
-                sameTick ? " in the same tick" : "", holdTau, s.highestEver, s.highestToIntake);
-}
-
-static void b_just_after_a_rise_starts(double holdTau) {
-    // R2 from INTAKE, then B the moment the cascade starts moving: still "down"
-    // when B lands, but it coasts up off the bottom while stopping, so it has
-    // to go back down before the piston moves.
-    Sim s;
-    s.holdTau = holdTau;
-    s.liftCmd = 127;
-    // Already moving up, but still inside the bottom slack.
-    while (s.height < LIFT_BOTTOM) s.step();
-    assert(s.height <= LIFT_BOTTOM + PTO_DOWN_SLACK && s.liftW > 10);
-    s.liftCmd = 0;
-    s.intake = 127;
-    s.step();
-    assert(s.c.phase == PtoControl::STOPPING);  // counted as down when B landed
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
-    // It really did coast up far enough to have to go back down.
-    assert(s.highestEver > LIFT_BOTTOM + PTO_DOWN_SLACK + PTO_DOWN_HYSTERESIS);
-    s.checks();
-    std::printf("  B as a rise passes the bottom zone (stop in %.2f s): coasted to %.0f, came back down, "
-                "shifted at %.1f\n",
-                holdTau, s.highestEver, s.highestToIntake);
-}
-
-static void a_sensor_glitch_on_the_way_down() {
-    // One missed lift sensor reading mid-trip mustn't count as "can't tell, so
-    // shift now".
-    Sim s;
-    s.raiseTo(1000);
-    s.intake = 127;
-    s.run(150);
-    assert(s.c.phase == PtoControl::LOWERING && s.height > 500);
-    s.glitchAt = s.now;
-    for (int i = 0; i < 3; i++) {
-        s.step();
-        assert(s.c.phase == PtoControl::LOWERING);  // the last good reading still stands
-    }
-    assert(s.pistonMoves == 1);  // still only the shift into LIFT
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
-    s.checks();
-    std::printf("  one missed sensor reading on the way down: kept going, shifted at %.1f\n",
-                s.highestToIntake);
-}
-
-static void down_on_the_way_down_stops_the_cascade() {
-    Sim s;
-    s.raiseTo(1000);
-    s.intake = 127;
-    s.run(150);
-    assert(s.c.phase == PtoControl::LOWERING);
-    s.downPress = true;  // changed their mind: stay in LIFT
-    s.step();
-    assert(s.c.target == PtoMode::LIFT && s.c.phase == PtoControl::READY);
-    s.run(100);
     double stopped = s.height;
-    s.run(500);
-    assert(std::fabs(s.height - stopped) < 5 && s.lc.mode == LiftControl::IDLE && stopped > 500);
+    s.run(PTO_CLAMP_TIMEOUT_MS + 500);
+    assert(s.c.target == PtoMode::INTAKE && s.c.toClamp && std::fabs(s.height - stopped) < 1);
+    s.liftCmd = 0;
+    s.run(2000);
+    assert(!s.c.toClamp && s.clawReadies == 1 && std::fabs(s.height - PTO_CLAMP_HEIGHT) <= PTO_CLAMP_SLACK);
     s.checks();
-    std::printf("  DOWN on the way down: stays in LIFT, the cascade stops at %.0f\n", stopped);
+    std::printf("  B with R2 still held: cascade waits at %.0f until R2 is let go, then clamp height\n",
+                stopped);
 }
 
-static void y_straight_to_b_counts_as_a_press() {
+static void r1_in_intake_shifts_and_lowers() {
     Sim s;
-    s.intake = -127;  // Y
-    s.run(200);
-    s.liftCmd = 127;  // then R2: LIFT wins
-    s.run(600);
-    s.liftCmd = 0;
-    s.run(200);
+    s.raiseTo(800);
+    s.intake = 127;
+    s.run(2000);
+    s.intake = 0;
+    assert(s.c.target == PtoMode::INTAKE && s.clawReadies == 1);
+    s.liftCmd = -127;  // R1 below clamp height
+    s.step();
     assert(s.c.target == PtoMode::LIFT);
-    s.intake = 127;  // B pressed with Y still held: B wins in opcontrol
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
+    s.run(1500);
+    assert(s.height <= LIFT_BOTTOM + 3);
     s.checks();
-    std::printf("  Y held, R2, then B: B still counts as a fresh press\n");
-}
-
-static void resting_right_at_the_edge_doesnt_bounce() {
-    // Something stops the cascade just above "down", and the sensor jitters
-    // across the line. It must still shift, not go back and forth forever.
-    Sim s;
-    s.raiseTo(300);
-    s.jamHeight = LIFT_BOTTOM + PTO_DOWN_SLACK + 0.2;
-    s.heightNoise = 0.3;
-    s.intake = 127;
-    std::uint32_t ms = s.settle(PTO_LOWER_TIMEOUT_MS + 1500);
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127 && s.bounces < 3);
-    s.checks();
-    std::printf("  stuck just above the bottom with a jittery sensor: shifted in %u ms, %d bounces\n",
-                static_cast<unsigned>(ms), s.bounces);
-}
-
-static void letting_go_of_r1_on_the_way_down_keeps_going() {
-    Sim s;
-    s.raiseTo(1000);
-    s.intake = 127;
-    s.run(100);
-    s.liftCmd = -127;
-    s.run(150);
-    s.liftCmd = 0;
-    s.run(20);
-    assert(s.c.phase == PtoControl::LOWERING && s.lc.mode == LiftControl::TARGET && s.lc.ptoTrip);
-    assert(s.liftW < -20);  // never stopped
-    s.settle();
-    s.run(50);
-    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
-    s.checks();
-    std::printf("  R1 let go on the way down: the trip carries straight on\n");
-}
-
-static void an_auton_changing_intake_power_isnt_a_press() {
-    Sim s;
-    s.intake = 127;
-    s.run(200);
-    s.liftCmd = 127;  // R2: LIFT
-    s.run(700);
-    s.liftCmd = 0;
-    s.run(200);
-    assert(s.c.target == PtoMode::LIFT);
-    s.intake = 100;  // same direction, different power
-    s.run(300);
-    assert(s.c.target == PtoMode::LIFT && s.c.phase == PtoControl::READY);
-    s.checks();
-    std::printf("  intake power 127 -> 100 in LIFT: not a fresh press, stays in LIFT\n");
+    std::printf("  R1 in INTAKE: shifts to LIFT, comes down below clamp height\n");
 }
 
 static void r1_at_the_bottom_does_nothing() {
@@ -538,28 +408,27 @@ static void r1_at_the_bottom_does_nothing() {
     s.run(500);
     assert(s.pistonMoves == 0 && s.c.target == PtoMode::INTAKE && s.highestEver < 1);
     s.checks();
-    std::printf("  R1 in INTAKE with the cascade down: no shift, nothing moves\n");
+    std::printf("  R1 in INTAKE with the cascade at the bottom: no shift, nothing moves\n");
 }
 
 static void the_piston_waits_for_the_cascade_to_stop() {
-    // R1 bringing it down, DOWN pressed just after the lift task sent power. It
-    // reaches the bottom moving; the piston waits until it's really held still.
+    // R2 lifting at full speed, B landing just after the lift task sent power
+    // and while the lagging speed readings still say it's moving. The piston
+    // waits until the cascade has really been held still.
     Sim s;
-    s.raiseTo(300);
-    s.liftCmd = -127;
-    s.run(50);
+    s.liftCmd = 127;
+    while (s.height < 500) s.step();
     s.shiftMidTick = true;
     s.midTickTo = PtoMode::INTAKE;
     s.step();
-    assert(s.c.phase == PtoControl::LOWERING);
+    assert(s.c.phase == PtoControl::STOPPING && s.pistonMoves == 1);
     s.settle();
-    assert(s.firedAt - s.liftMovedAt >= PTO_SETTLE_MS);
     s.liftCmd = 0;
     s.run(100);
     s.checks();
-    std::printf("  reaching the bottom moving: piston fired %u ms after the last lift power, "
-                "%.1f rpm\n",
-                static_cast<unsigned>(s.firedAt - s.liftMovedAt), s.fastestAtFire);
+    std::printf("  shift asked for while lifting at full speed: piston fired %u ms after the "
+                "last lift power, %.1f rpm\n",
+                static_cast<unsigned>(s.lastGapAtFire), s.fastestAtFire);
 }
 
 static void changing_its_mind() {
@@ -614,49 +483,35 @@ static void stuck_missing_or_lying_readings() {
     assert(s.pistonMoves == 1);
     assert(ms >= PTO_STOP_TIMEOUT_MS + PTO_SHIFT_MS && ms <= PTO_STOP_TIMEOUT_MS + PTO_SHIFT_MS + 40);
 
-    // Lift motor unplugged: R2 still shifts and lifts; the intake motor never joins.
+    // Lift motor speed unreadable: R2 still shifts and lifts; the intake motor
+    // never joins; B still shifts back.
     Sim t;
     t.liftUnplugged = true;
     t.liftCmd = 127;
     t.run(1500);
     assert(t.c.target == PtoMode::LIFT && !t.c.pushing && t.ptoPower == 0 && !t.c.noMesh);
-    // ...and B still brings the cascade down before shifting, with no speed to go by.
     t.liftCmd = 0;
-    t.run(200);
     t.intake = 127;
-    t.settle();
+    t.settle(1000);
     t.run(50);
-    assert(t.c.target == PtoMode::INTAKE && t.c.gaveUpLowering == 0 && t.ptoPower == 127);
+    assert(t.c.target == PtoMode::INTAKE && t.ptoPower == 127);
+
+    // Lift sensor dead: R1 can't know the cascade is at the bottom, so it shifts
+    // to LIFT and leaves it to the driver.
+    Sim u;
+    u.sensorBroken = true;
+    u.liftCmd = -127;
+    u.run(600);
+    assert(u.c.target == PtoMode::LIFT);
     s.checks();
     t.checks();
-
-    // The next two give up on "all the way down" on purpose (see pto.hpp), so
-    // no checks() for them.
-
-    // Lift sensor dead: the height is unknown, so B shifts straight away rather
-    // than leave the intake dead for the match.
-    Sim u;
-    u.raiseTo(800);
-    u.sensorBroken = true;
-    u.intake = 127;
-    u.settle();
-    u.run(50);
-    assert(u.c.target == PtoMode::INTAKE && u.ptoPower == 127);
-
-    // Something stops the cascade getting down: shifts anyway after the timeout.
-    Sim v;
-    v.raiseTo(800);
-    v.jamHeight = 600;
-    v.intake = 127;
-    v.settle(PTO_LOWER_TIMEOUT_MS + 1000);
-    v.run(50);
-    assert(v.c.gaveUpLowering == 1 && v.c.target == PtoMode::INTAKE && v.ptoPower == 127);
-    std::printf("  stuck reading: shifted in %u ms; unplugged lift motor: stays out of it; dead "
-                "lift sensor or a jam: the intake still works\n",
+    u.checks();
+    std::printf("  stuck reading: shifted in %u ms; unreadable lift motor: stays out of it; dead "
+                "lift sensor: R1 still shifts\n",
                 static_cast<unsigned>(ms));
 }
 
-static void disabled_mid_shift_or_mid_trip_down() {
+static void disabled_mid_shift_starts_over() {
     Sim s;
     s.c.shift(PtoMode::LIFT);
     s.run(100);
@@ -667,26 +522,42 @@ static void disabled_mid_shift_or_mid_trip_down() {
     std::uint32_t start = s.now;
     s.settle();
     assert(s.now - start >= PTO_SHIFT_MS);  // the turn into the teeth ran again
+    s.liftCmd = 127;
+    s.run(800);
+    assert(s.c.pushing && s.where == Sim::ON_WINCH);
+    s.checks();
+    std::printf("  disabled mid-shift: nothing moves, finishes the shift once enabled\n");
+}
+
+static void disabled_or_no_sensor_on_the_way_to_clamp_height() {
+    // Disabled on the way: carries on once enabled, then the claw gets ready.
+    Sim s;
+    s.raiseTo(1000);
+    s.intake = 127;
+    s.settle();
+    s.run(100);
+    assert(s.c.toClamp);
+    s.enabled = false;
+    s.run(1000);
+    s.enabled = true;
+    s.run(2000);
+    assert(!s.c.toClamp && s.clawReadies == 1);
     s.checks();
 
-    // Disabled on the way down: carries on down once enabled, never shifts up high.
+    // Lift sensor dead: it can't know where clamp height is, so nothing moves,
+    // it gives up, the claw is left alone, and the intake still runs.
     Sim t;
-    t.raiseTo(1000);
-    t.intake = 127;
-    t.run(100);
-    assert(t.c.phase == PtoControl::LOWERING);
-    t.enabled = false;
-    t.run(1000);
-    assert(t.c.phase == PtoControl::LOWERING && t.pistonMoves == 1);
-    t.enabled = true;
-    t.intake = 0;  // pto.cpp dropped B at the disable; the driver presses it again
-    t.step();
+    t.raiseTo(800);
+    t.sensorBroken = true;
     t.intake = 127;
     t.settle();
-    t.run(50);
-    assert(t.c.target == PtoMode::INTAKE && t.ptoPower == 127);
+    double h = t.height;
+    t.run(PTO_CLAMP_TIMEOUT_MS + 300);
+    assert(!t.c.toClamp && t.c.clampGaveUp == 1 && t.clawReadies == 0 && t.ptoPower == 127);
+    assert(std::fabs(t.height - h) < 1);
     t.checks();
-    std::printf("  disabled mid-shift or on the way down: picks up where it was once enabled\n");
+    std::printf("  disabled on the way to clamp height: carries on; dead lift sensor: stays put, "
+                "claw left alone\n");
 }
 
 static void no_air_shows_nomesh(double liftTau, int power) {
@@ -706,8 +577,7 @@ static void no_air_shows_nomesh(double liftTau, int power) {
     s.run(50);
     assert(!s.c.noMesh && s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
     s.checks();
-    std::printf("  piston never moves, R2 at power %d with a %.2f s lift: NOMESH, never pushes; "
-                "B still brings it down\n",
+    std::printf("  piston never moves, R2 at power %d with a %.2f s lift: NOMESH, never pushes\n",
                 power, liftTau);
 }
 
@@ -734,14 +604,46 @@ static void slipping_out_stops_it_pushing() {
                 static_cast<unsigned>(s.now - start));
 }
 
+static void y_straight_to_b_counts_as_a_press() {
+    Sim s;
+    s.intake = -127;  // Y
+    s.run(200);
+    s.liftCmd = 127;  // then R2: LIFT wins
+    s.run(600);
+    s.liftCmd = 0;
+    s.run(200);
+    assert(s.c.target == PtoMode::LIFT);
+    s.intake = 127;  // B pressed with Y still held: B wins in opcontrol
+    s.settle();
+    s.run(50);
+    assert(s.c.target == PtoMode::INTAKE && s.ptoPower == 127);
+    s.checks();
+    std::printf("  Y held, R2, then B: B still counts as a fresh press\n");
+}
+
+static void an_auton_changing_intake_power_isnt_a_press() {
+    Sim s;
+    s.intake = 127;
+    s.run(200);
+    s.liftCmd = 127;  // R2: LIFT
+    s.run(700);
+    s.liftCmd = 0;
+    s.run(200);
+    assert(s.c.target == PtoMode::LIFT);
+    s.intake = 100;  // same direction, different power
+    s.run(300);
+    assert(s.c.target == PtoMode::LIFT && s.c.phase == PtoControl::READY);
+    s.checks();
+    std::printf("  intake power 127 -> 100 in LIFT: not a fresh press, stays in LIFT\n");
+}
+
 static void a_random_driver_for_two_minutes(int wiring, double holdTau) {
     Sim s;
     s.wiring = wiring;
     s.holdTau = holdTau;
     s.noise = 3;
     s.seed = 99 + wiring + static_cast<unsigned>(holdTau * 1000);
-    int glitches = 0;
-    int shifts = 0, ups = 0, intakes = 0;
+    int shifts = 0, ups = 0, intakes = 0, glitches = 0;
     PtoMode was = s.c.target;
     std::uint32_t end = s.now + 120000;
     while (s.now < end) {
@@ -776,41 +678,35 @@ static void a_random_driver_for_two_minutes(int wiring, double holdTau) {
     s.checks();
     assert(s.c.meshes >= 1 && s.c.slips == 0);
     std::printf("  2 min of random driving, motor %+d raises, stop in %.2f s, %d sensor glitches: "
-                "%d shifts, never fought, never rose in INTAKE, never shifted to INTAKE above %.1f\n",
-                wiring, holdTau, glitches, shifts, s.highestToIntake);
+                "%d shifts, %d times to clamp height, never fought\n",
+                wiring, holdTau, glitches, shifts, s.c.clampReady);
     assert(shifts > 20 && ups > 20 && intakes > 20);
 }
 
 int main() {
-    starts_in_intake_with_the_cascade_held_down();
+    starts_in_intake_with_the_cascade_held();
     r2_shifts_to_lift_then_lifts(1, false);
     r2_shifts_to_lift_then_lifts(-1, false);
     r2_shifts_to_lift_then_lifts(1, true);
     r2_shifts_to_lift_then_lifts(-1, true);
-    b_takes_the_cascade_down_then_intakes(1);
-    b_takes_the_cascade_down_then_intakes(-1);
-    r2_on_the_way_down_cancels_and_r1_doesnt();
-    b_while_r2_is_held_waits_for_r2();
-    b_then_r2_let_go_while_still_rising(0.04, false);
-    b_then_r2_let_go_while_still_rising(0.1, false);
-    b_then_r2_let_go_while_still_rising(0.1, true);
-    b_just_after_a_rise_starts(0.04);
-    b_just_after_a_rise_starts(0.1);
-    a_sensor_glitch_on_the_way_down();
-    down_on_the_way_down_stops_the_cascade();
-    y_straight_to_b_counts_as_a_press();
-    resting_right_at_the_edge_doesnt_bounce();
-    letting_go_of_r1_on_the_way_down_keeps_going();
-    an_auton_changing_intake_power_isnt_a_press();
+    b_takes_the_cascade_to_clamp_height(1, 1000);
+    b_takes_the_cascade_to_clamp_height(-1, 1000);
+    b_takes_the_cascade_to_clamp_height(1, 0);
+    r2_on_the_way_to_clamp_height_cancels();
+    r2_still_held_when_b_is_pressed();
+    r1_in_intake_shifts_and_lowers();
+    disabled_or_no_sensor_on_the_way_to_clamp_height();
     r1_at_the_bottom_does_nothing();
     the_piston_waits_for_the_cascade_to_stop();
     changing_its_mind();
     stuck_missing_or_lying_readings();
-    disabled_mid_shift_or_mid_trip_down();
+    disabled_mid_shift_starts_over();
     no_air_shows_nomesh(0.05, 127);
     no_air_shows_nomesh(0.15, 70);
     no_air_shows_nomesh(0.3, 80);
     slipping_out_stops_it_pushing();
+    y_straight_to_b_counts_as_a_press();
+    an_auton_changing_intake_power_isnt_a_press();
     a_random_driver_for_two_minutes(1, 0.04);
     a_random_driver_for_two_minutes(-1, 0.04);
     a_random_driver_for_two_minutes(1, 0.1);

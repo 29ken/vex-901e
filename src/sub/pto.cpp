@@ -15,7 +15,8 @@ static int intakePower = 0;
 // Only the lift task touches these.
 static PtoMode sentPiston = PtoMode::INTAKE;
 static pros::motor_brake_mode_e_t sentBrake = pros::E_MOTOR_BRAKE_COAST;
-static int saidMeshes = 0, saidSlips = 0, saidGaveUp = 0;
+static int saidMeshes = 0, saidSlips = 0, saidClampGaveUp = 0;
+static int clawReadyTaken = 0;  // clamp-height arrivals the driver loop has acted on
 static bool saidNoMesh = false;
 
 static bool pistonValue(PtoMode mode) {
@@ -28,8 +29,8 @@ void initPto() {
     motor.set_brake_mode(sentBrake);
 }
 
-bool ptoStep(const PtoLiftTick& tick) {
-    if (!piston) return false;  // initPto() hasn't run
+PtoLiftRequest ptoStep(const PtoLiftTick& tick) {
+    if (!piston) return {};  // initPto() hasn't run
     double ptoRpm = motor.get_actual_velocity();
     PtoOutput out;
     {
@@ -37,7 +38,10 @@ bool ptoStep(const PtoLiftTick& tick) {
         PtoInput in;
         in.now = pros::millis();
         in.enabled = !pros::competition::is_disabled();
-        if (!in.enabled) intakePower = 0;  // a button held at the buzzer doesn't carry over
+        if (!in.enabled) {
+            intakePower = 0;  // a button held at the buzzer doesn't carry over
+            clawReadyTaken = control.clampReady;  // nor does a claw that was about to get ready
+        }
         in.liftPower = tick.power;
         in.liftHeld = tick.held;
         in.liftAsk = tick.ask;
@@ -62,10 +66,11 @@ bool ptoStep(const PtoLiftTick& tick) {
                         "air, PTO_PISTON, and that it has the same red cartridge as the lift motors\n");
         }
         saidNoMesh = control.noMesh;
-        if (control.gaveUpLowering != saidGaveUp) {
-            std::printf("PTO couldn't get the cascade down in %.1f s; shifted to INTAKE anyway\n",
-                        PTO_LOWER_TIMEOUT_MS / 1000.0);
-            saidGaveUp = control.gaveUpLowering;
+        if (control.clampGaveUp != saidClampGaveUp) {
+            std::printf("PTO couldn't get the cascade to clamp height (PTO_CLAMP_HEIGHT %.0f); "
+                        "left the claw alone\n",
+                        PTO_CLAMP_HEIGHT);
+            saidClampGaveUp = control.clampGaveUp;
         }
     }
 
@@ -78,7 +83,14 @@ bool ptoStep(const PtoLiftTick& tick) {
         sentBrake = out.brake;
     }
     motor.move(out.power);
-    return out.lowerLift;
+    return {out.toClamp, PTO_CLAMP_HEIGHT};
+}
+
+bool ptoClawReady() {
+    std::lock_guard<pros::Mutex> hold(mutex);
+    if (clawReadyTaken == control.clampReady) return false;
+    clawReadyTaken = control.clampReady;
+    return true;
 }
 
 void ptoShift(PtoMode mode) {
@@ -101,22 +113,17 @@ void ptoWaitUntilShifted(std::uint32_t timeoutMs) {
     // task's next tick, so give it one before checking.
     pros::delay(20);
     std::uint32_t start = pros::millis();
-    while (pros::millis() - start < timeoutMs) {
-        PtoStatus s = ptoStatus();
-        if (!s.lowering && !s.shifting) return;
-        pros::delay(10);
-    }
+    while (ptoStatus().shifting && pros::millis() - start < timeoutMs) pros::delay(10);
 }
 
-bool ptoHoldingLift() {
+PtoLiftHold ptoLiftHold() {
     std::lock_guard<pros::Mutex> hold(mutex);
-    return !control.liftFree();
+    return control.liftHold();
 }
 
 PtoStatus ptoStatus() {
     std::lock_guard<pros::Mutex> hold(mutex);
-    bool onWinch = control.liftFree();
-    bool lowering = control.phase == PtoControl::LOWERING;
-    bool shifting = control.phase == PtoControl::STOPPING || control.phase == PtoControl::SHIFTING;
-    return {control.target, lowering, shifting, onWinch && control.pushing, onWinch && control.noMesh};
+    bool onWinch = control.target == PtoMode::LIFT && control.phase == PtoControl::READY;
+    return {control.target, control.phase != PtoControl::READY, onWinch && control.pushing,
+            onWinch && control.noMesh};
 }

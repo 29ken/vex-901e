@@ -9,7 +9,10 @@
 // The PTO lends the intake motor to the lift. One piston slides the motor's
 // 36T gear between two jobs:
 //   INTAKE (piston retracted): the gear is on the intake's 36T, so B and Y run
-//                              the intake. The cascade stays all the way down.
+//                              the intake. The two lift motors take the cascade
+//                              to PTO_CLAMP_HEIGHT and hold it there, and the
+//                              claw gets ready (wrist down, claw open, autograb
+//                              armed) to clamp what the intake brings in.
 //   LIFT   (piston extended):  the gear is on the winch's 12T, so the motor is a
 //                              third lift motor. R1/R2 and every limit in
 //                              lift.hpp drive all three.
@@ -17,15 +20,18 @@
 // in LIFT it just gets the same power they do. That only holds while all three
 // have the same red 100 rpm cartridge.
 //
-// It follows the driver. A fresh R1/R2 press shifts to LIFT, then the cascade
-// moves. A fresh B/Y press shifts to INTAKE, then the intake runs; if the cascade
-// is up, it first goes all the way down (on all three motors), then shifts.
-// Whichever was pressed last wins. R2 on the way down cancels the trip.
-// DOWN shifts too, so the driver can get into LIFT on the way to the goal and
-// skip the pause.
+// It follows the driver, straight away. A fresh B/Y press shifts to INTAKE, then
+// the intake runs while the two lift motors take the cascade to clamp height,
+// up or down; once it's there, the claw gets ready. A fresh R1/R2 press shifts
+// to LIFT (and cancels a move to clamp height), then the cascade moves on all
+// three motors. Whichever was pressed last wins. (R1 with the cascade already
+// at the bottom has nothing to do, so it doesn't shift.) DOWN shifts too, so the
+// driver can get into LIFT on the way to the goal and skip the pause.
 //
 // A shift holds the cascade still and stops the motor, fires the piston, then
-// turns the gear slowly so it drops into the teeth: about 0.35 s.
+// turns the gear slowly so it drops into the teeth: about 0.35 s. The gear can't
+// slide into a turning winch or intake without the teeth clashing, so that pause
+// can't be skipped, only shortened (PTO_SHIFT_MS).
 //
 // In LIFT the motor doesn't push until it's been seen turning with the lift. That
 // also shows which way it has to push, so there is no direction to set, and it
@@ -39,42 +45,51 @@
 //   2. Hold R2 for a moment. The terminal prints "PTO meshed with the lift" and
 //      from then on the intake motor lifts too. If the controller shows NOMESH
 //      instead, check the air and PTO_PISTON in config.hpp.
-//   3. Press B. The cascade comes down, the gear slides back, the intake runs.
+//   3. Measure PTO_CLAMP_HEIGHT (see below), then press B. The gear slides back,
+//      the intake runs, the cascade goes to clamp height and the claw gets ready.
 //   4. Lower PTO_SHIFT_MS until a shift now and then ends in NOMESH, then add 50.
 
 enum class PtoMode { INTAKE, LIFT };
 
 // Sets the piston to INTAKE. Call once from initialize(), before initLift().
 void initPto();
-// Shifts to that mode, unless it's already there or on the way. INTAKE takes
-// the cascade down first.
+// Shifts to that mode, unless it's already there or on the way.
 void ptoShift(PtoMode mode);
 // INTAKE <-> LIFT.
 void ptoToggle();
 // Runs the intake, -127..127, + pulls in. Only does anything in INTAKE; a fresh
 // press in LIFT shifts to INTAKE first. Resets to 0 whenever the robot is disabled.
 void intakeMove(int power);
-// For autons: waits for a trip down and shift in progress to finish.
-void ptoWaitUntilShifted(std::uint32_t timeoutMs = 3000);
+// For autons: waits for a shift in progress to finish.
+void ptoWaitUntilShifted(std::uint32_t timeoutMs = 1000);
 
 // What the lift task tells the PTO each tick.
 struct PtoLiftTick {
     int power = 0;             // what the lift motors were just sent
-    bool held = false;         // ptoHoldingLift() at the start of the tick
+    bool held = false;         // ptoLiftHold() said HELD at the start of the tick
     int ask = 0;               // LiftControl::ask(): +1 up, -1 down, 0 nothing
     bool heightKnown = false;  // the lift sensor works and is zeroed
     double height = 0;         // lift sensor degrees above the bottom
     double rpm = 0;            // lift motor speed, + is up (PROS_ERR_F if unreadable)
 };
+// What the PTO wants the lift to do this tick.
+struct PtoLiftRequest {
+    bool move = false;  // take the cascade to height (LiftControl::moveForPto); else
+                        // end any move the PTO started (LiftControl::endPtoMove)
+    double height = 0;
+};
+// What the lift may do this tick: anything (LIFT), only a move the PTO started
+// (on the way to clamp height), or nothing (INTAKE, or mid-shift: send it 0).
+enum class PtoLiftHold { FREE, PTO_MOVE_ONLY, HELD };
 // The lift task calls these every loop.
-bool ptoHoldingLift();  // true unless the gear is on the winch: send the lift 0
-// Runs the PTO for this tick. Returns true when it wants the cascade taken to the
-// bottom (LiftControl::lowerForPto) before shifting to INTAKE.
-bool ptoStep(const PtoLiftTick& tick);
+PtoLiftHold ptoLiftHold();
+PtoLiftRequest ptoStep(const PtoLiftTick& tick);
+// Driver loop: true once each time the cascade reaches clamp height after a
+// switch to INTAKE. Then extend the wrist, open the claw and arm autograb.
+bool ptoClawReady();
 
 struct PtoStatus {
     PtoMode mode;   // where it is, or where it's going
-    bool lowering;  // taking the cascade down before shifting to INTAKE
     bool shifting;
     bool pushing;   // LIFT: the intake motor is turning with the lift and helping
     bool noMesh;    // LIFT: the lift keeps moving but the intake motor isn't turning with it
@@ -88,22 +103,23 @@ PtoStatus ptoStatus();
 // false: only DOWN shifts, and R1/R2 do nothing in INTAKE.
 inline constexpr bool PTO_FOLLOW_DRIVER = true;
 
-// The cascade counts as all the way down within this many lift sensor degrees of
-// LIFT_BOTTOM, where the lift itself stops going down.
+// R1 in INTAKE only shifts to LIFT if the cascade is more than this many lift
+// sensor degrees above LIFT_BOTTOM, where the lift stops going down anyway.
 inline constexpr double PTO_DOWN_SLACK = 5;
-// If it coasts up while stopping to shift, it goes back down first, but only
-// once it's this much further up, so one resting right at the edge doesn't
-// bounce back and forth. It never shifts to INTAKE higher than
-// LIFT_BOTTOM + PTO_DOWN_SLACK + PTO_DOWN_HYSTERESIS.
-inline constexpr double PTO_DOWN_HYSTERESIS = 3;
-// If a trip down hasn't got there in this long (stuck, or the lift sensor is
-// lying), it shifts to INTAKE anyway so the intake still works. Time with R1/R2
-// held doesn't count: the driver is in charge of the cascade then.
-inline constexpr std::uint32_t PTO_LOWER_TIMEOUT_MS = 3000;
-// The lift sensor has to be silent this long before the height counts as
-// unknown; until then the last good reading stands. (Unknown: shifts to INTAKE
-// without a trip down, so a dead sensor doesn't leave the intake dead too.)
-inline constexpr std::uint32_t PTO_SENSOR_LOST_MS = 200;
+
+// Where the cascade goes after a switch to INTAKE: the lift sensor height (see
+// "Lift" on the brain screen) at which the claw, with the wrist extended, can
+// clamp a cup or pin the intake has brought in.
+// TODO: measure. Put the cascade there by hand and read the brain screen.
+inline constexpr double PTO_CLAMP_HEIGHT = 50;
+// Counts as there within this many degrees, once it has sat there, barely
+// moving, for PTO_CLAMP_SETTLE_MS. Then the claw gets ready.
+inline constexpr double PTO_CLAMP_SLACK = 10;
+inline constexpr std::uint32_t PTO_CLAMP_SETTLE_MS = 50;
+// If it hasn't got there in this long (stuck, or no lift sensor), it gives up
+// and leaves the claw alone. Time with R1/R2 still held doesn't count: the
+// move waits for them to be let go.
+inline constexpr std::uint32_t PTO_CLAMP_TIMEOUT_MS = 3000;
 
 // Before firing the piston, the lift has to have been held still this long...
 inline constexpr std::uint32_t PTO_SETTLE_MS = 30;
@@ -179,11 +195,11 @@ struct PtoOutput {
     PtoMode piston;                     // the job the piston is set for
     int power;                          // intake motor, -127..127
     pros::motor_brake_mode_e_t brake;   // intake motor
-    bool lowerLift;                     // take the cascade to the bottom
+    bool toClamp;                       // take the cascade to PTO_CLAMP_HEIGHT
 };
 
 struct PtoControl {
-    enum Phase { READY, LOWERING, STOPPING, SHIFTING };
+    enum Phase { READY, STOPPING, SHIFTING };
     PtoMode target = PtoMode::INTAKE;  // the mode it's in, or going to
     PtoMode piston = PtoMode::INTAKE;  // what the piston was last told
     Phase phase = READY;
@@ -195,17 +211,23 @@ struct PtoControl {
     bool noMesh = false;
     int meshes = 0;        // times it started pushing, for the terminal
     int slips = 0;         // times it stopped pushing because it fell out of step
-    int gaveUpLowering = 0;  // times it shifted to INTAKE without the cascade getting down
     int candidate = 0;     // the way it seems to be turning, before it's sure
+
+    // INTAKE
+    bool toClamp = false;  // the lift motors are taking the cascade to clamp height
+    int clampReady = 0;    // times it got there; the claw gets ready each time
+    int clampGaveUp = 0;   // times it didn't get there in PTO_CLAMP_TIMEOUT_MS
 
     int lastIntakePower = 0;
     int lastLiftAsk = 0;
-    double lastHeight = 0;     // the last good lift sensor reading; matches start down
-    bool forceShift = false;   // the trip down gave up: shift to INTAKE wherever the cascade is
 
-    // The lift may only move while the gear is on the winch and staying there.
-    bool liftFree() const {
-        return phase == LOWERING || (phase == READY && target == PtoMode::LIFT);
+    // The lift may do anything while the gear is on the winch and staying there.
+    // In INTAKE it only moves on the way to clamp height, and only by the PTO's
+    // own move, so a stale R2 still held can't raise it on two motors.
+    PtoLiftHold liftHold() const {
+        if (phase != READY) return PtoLiftHold::HELD;
+        if (target == PtoMode::LIFT) return PtoLiftHold::FREE;
+        return toClamp ? PtoLiftHold::PTO_MOVE_ONLY : PtoLiftHold::HELD;
     }
 
     // Shifting has nothing to do with clocks here: a phase starts counting on the
@@ -213,85 +235,47 @@ struct PtoControl {
     void shift(PtoMode to) {
         if (to == target) return;
         target = to;
-        forceShift = false;
-        if (phase == LOWERING) {
-            phase = READY;  // was on the way to INTAKE; the gear never left the winch
-            clearTimers();
-            return;
-        }
+        toClamp = false;  // the driver wants something else now
         if (phase == STOPPING && settled && piston == to) {
             phase = READY;  // changed its mind before the piston moved: nothing to undo
             clearTimers();
             return;
         }
-        // Off the winch: the cascade goes all the way down first.
-        bool onWinch = phase == READY && piston == PtoMode::LIFT;
-        if (to == PtoMode::INTAKE && onWinch) {
-            lowerTime.on = false;  // a new trip down: a fresh give-up clock
-            begin(LOWERING);
-        } else {
-            begin(STOPPING);
-        }
+        begin(STOPPING);
     }
 
     PtoOutput update(const PtoInput& in) {
-        if (in.liftKnown) lastHeight = in.liftHeight;
-        bool sensorGone = sensorLost.held(!in.liftKnown, in.now) >= PTO_SENSOR_LOST_MS;
-        bool down = sensorGone || lastHeight <= LIFT_BOTTOM + PTO_DOWN_SLACK;
-
-        // Go where the driver is working. A fresh intake press (B, Y, or one
-        // straight to the other; not just a change in power) means INTAKE...
+        // Go where the driver is working, straight away. A fresh intake press (B,
+        // Y, or one straight to the other; not just a change in power) means INTAKE...
         int intakeWay = (in.intakePower > 0) - (in.intakePower < 0);
         int lastIntakeWay = (lastIntakePower > 0) - (lastIntakePower < 0);
         if (PTO_FOLLOW_DRIVER && intakeWay != 0 && intakeWay != lastIntakeWay) shift(PtoMode::INTAKE);
         lastIntakePower = in.intakePower;
-        // ...and a fresh lift press means LIFT: up, or down if there's anywhere to
-        // go and it isn't already on its way down to shift to INTAKE.
+        // ...and a fresh lift press means LIFT: up, or down unless the cascade is
+        // already at the bottom (or the sensor can't tell; then it shifts).
         if (PTO_FOLLOW_DRIVER && in.liftAsk != 0 && in.liftAsk != lastLiftAsk) {
-            if (in.liftAsk > 0 || (!down && phase != LOWERING)) shift(PtoMode::LIFT);
+            bool atBottom = in.liftKnown && in.liftHeight <= LIFT_BOTTOM + PTO_DOWN_SLACK;
+            if (in.liftAsk > 0 || !atBottom) shift(PtoMode::LIFT);
         }
         lastLiftAsk = in.liftAsk;
 
         if (!in.enabled) {
             // The motors are off while disabled, so a shift in progress starts
-            // over once enabled, a trip down carries on, and nothing counts
-            // toward the checks.
-            if (phase == STOPPING || phase == SHIFTING) begin(STOPPING);
+            // over once enabled, and nothing counts toward the checks.
+            if (phase != READY) begin(STOPPING);
             clearTimers();
-            lowerTime.on = false;
+            clampTime.on = false;  // a move to clamp height carries on once enabled
+            clampSettle.on = false;
             PtoOutput out = output(in);
             out.power = 0;
-            out.lowerLift = false;
             return out;
         }
 
         std::uint32_t inPhase = phaseTime.held(true, in.now);
-        if (phase == LOWERING) {
-            // The give-up clock only runs while the lift is left to go down on its
-            // own: not while the driver is holding R1/R2.
-            bool stuck = lowerTime.held(in.liftAsk == 0, in.now) >= PTO_LOWER_TIMEOUT_MS;
-            if (down || stuck) {
-                if (!down) {
-                    gaveUpLowering++;
-                    forceShift = true;
-                }
-                begin(STOPPING);
-                inPhase = phaseTime.held(true, in.now);
-            }
-        }
-        bool offBottom = !sensorGone && lastHeight > LIFT_BOTTOM + PTO_DOWN_SLACK + PTO_DOWN_HYSTERESIS;
-        if (phase == STOPPING && target == PtoMode::INTAKE && piston == PtoMode::LIFT && settled &&
-            offBottom && !forceShift) {
-            // Off the bottom with the gear on the winch (it was moving up when the
-            // trip down was asked for, and coasted up while stopping): go back
-            // down. The give-up clock keeps running from the first trip.
-            begin(LOWERING);
-        }
         if (phase == STOPPING) {
             bool liftStill = liftHeldFor.held(in.liftHeld, in.now) >= PTO_SETTLE_MS;
             if (liftStill && (still(in) || inPhase >= PTO_STOP_TIMEOUT_MS)) {
                 piston = target;
-                forceShift = false;
                 settled = false;
                 pushing = false;  // the gear is moving: it has to show it's meshed again
                 noMesh = false;
@@ -303,8 +287,14 @@ struct PtoControl {
             phase = READY;
             settled = true;
             clearTimers();
+            if (target == PtoMode::INTAKE) {
+                toClamp = true;  // now the lift motors take it to clamp height
+                clampTime.on = false;
+                clampSettle.on = false;
+            }
         }
-        if (liftFree()) watchLift(in);
+        if (phase == READY && target == PtoMode::LIFT) watchLift(in);
+        if (phase == READY && toClamp) watchClamp(in);
         return output(in);
     }
 
@@ -316,10 +306,19 @@ struct PtoControl {
 
   private:
     PtoTimer phaseTime, liftHeldFor, agreeing, moving, outOfStep;
-    // Not phase timers, so clearTimers() leaves them alone: the give-up clock
-    // for a trip down (it carries on if it has to go back down again), and how
-    // long the lift sensor has been silent.
-    PtoTimer lowerTime, sensorLost;
+    PtoTimer clampTime, clampSettle;  // not phase timers: clearTimers() leaves them alone
+
+    void watchClamp(const PtoInput& in) {
+        bool slow = !std::isfinite(in.liftRpm) || std::fabs(in.liftRpm) < PTO_STILL_RPM;
+        bool there = in.liftKnown && std::fabs(in.liftHeight - PTO_CLAMP_HEIGHT) <= PTO_CLAMP_SLACK;
+        if (clampSettle.held(there && slow, in.now) >= PTO_CLAMP_SETTLE_MS) {
+            toClamp = false;
+            clampReady++;
+        } else if (clampTime.held(in.liftAsk == 0, in.now) >= PTO_CLAMP_TIMEOUT_MS) {
+            toClamp = false;
+            clampGaveUp++;
+        }
+    }
 
     void begin(Phase p) {
         phase = p;
@@ -387,14 +386,17 @@ struct PtoControl {
     PtoOutput output(const PtoInput& in) const {
         if (phase == STOPPING) return {piston, 0, pros::E_MOTOR_BRAKE_BRAKE, false};
         if (phase == SHIFTING) return {piston, PTO_JOG_POWER, pros::E_MOTOR_BRAKE_COAST, false};
-        if (phase == READY && target == PtoMode::INTAKE) {
-            return {piston, std::clamp(in.intakePower, -127, 127), pros::E_MOTOR_BRAKE_COAST, false};
+        if (target == PtoMode::INTAKE) {
+            // On the way to clamp height, the lift only drives while outside the
+            // window around it; inside, the lift motors just hold it while it
+            // settles, so it doesn't hunt back and forth.
+            bool inWindow = in.liftKnown && std::fabs(in.liftHeight - PTO_CLAMP_HEIGHT) <= PTO_CLAMP_SLACK;
+            return {piston, std::clamp(in.intakePower, -127, 127), pros::E_MOTOR_BRAKE_COAST,
+                    toClamp && !inWindow};
         }
-        // On the winch: in LIFT, or taking the cascade down on the way to INTAKE.
-        bool lowering = phase == LOWERING;
-        if (!pushing) return {piston, 0, pros::E_MOTOR_BRAKE_COAST, lowering};
+        if (!pushing) return {piston, 0, pros::E_MOTOR_BRAKE_COAST, false};
         // BRAKE, not HOLD: when the lift stops, the lift motors hold it, and this
         // one resists without pulling toward a hold point of its own.
-        return {piston, std::clamp(dir * in.liftPower, -127, 127), pros::E_MOTOR_BRAKE_BRAKE, lowering};
+        return {piston, std::clamp(dir * in.liftPower, -127, 127), pros::E_MOTOR_BRAKE_BRAKE, false};
     }
 };

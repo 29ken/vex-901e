@@ -33,9 +33,10 @@ static void loop() {
     while (true) {
         double raw;
         bool ok = readSensor(raw);
-        // The lift only moves while the PTO's gear is on the winch. Otherwise (in
-        // INTAKE, or mid-shift) it's held still, and R1/R2 make the PTO shift to LIFT.
-        bool ptoHolds = ptoHoldingLift();
+        // The lift only moves while the PTO's gear is on the winch, or on its two
+        // motors on the way to clamp height. Otherwise (in INTAKE, or mid-shift)
+        // it's held still, and R1/R2 make the PTO shift to LIFT.
+        PtoLiftHold ptoHold = ptoLiftHold();
         bool disabled = pros::competition::is_disabled();
         double rpm = liftRpm();
         PtoLiftTick tick;
@@ -46,11 +47,15 @@ static void loop() {
             // moves still wait out the disable.
             if (disabled) control.manual(0);
             if (ok) {
-                power = control.update(raw, rpm, !ptoHolds && !disabled, pros::millis());
+                bool mayMove = ptoHold == PtoLiftHold::FREE ||
+                               (ptoHold == PtoLiftHold::PTO_MOVE_ONLY && control.ptoMove);
+                power = control.update(raw, rpm, mayMove && !disabled, pros::millis());
             } else {
                 // No sensor: presets and the bottom limit can't work, but hand control still does.
                 if (control.mode != LiftControl::MANUAL) control.mode = LiftControl::IDLE;
-                power = control.mode == LiftControl::MANUAL && !ptoHolds ? control.manualPower : 0;
+                power = control.mode == LiftControl::MANUAL && ptoHold == PtoLiftHold::FREE
+                            ? control.manualPower
+                            : 0;
             }
             tick.ask = control.ask();
             tick.heightKnown = ok && control.zeroed && !control.backwards;
@@ -82,17 +87,17 @@ static void loop() {
         lift.move(power);
 
         // The PTO runs in the same tick, so in LIFT the intake motor gets the same
-        // power. Before shifting to INTAKE it has the cascade taken to the bottom.
+        // power. After a switch to INTAKE it has the cascade taken to clamp height.
         tick.power = power;
-        tick.held = ptoHolds;
+        tick.held = ptoHold == PtoLiftHold::HELD;
         tick.rpm = rpm;
-        bool lower = ptoStep(tick);
+        PtoLiftRequest want = ptoStep(tick);
         if (ok) {
             std::lock_guard<pros::Mutex> hold(mutex);
-            if (lower) {
-                control.lowerForPto(raw, rpm, pros::millis());
+            if (want.move) {
+                control.moveForPto(want.height, raw, rpm, pros::millis());
             } else {
-                control.endPtoTrip();
+                control.endPtoMove();
             }
         }
         pros::delay(10);
