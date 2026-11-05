@@ -196,10 +196,9 @@ static void drawAuton(const char* auton, std::uint32_t elapsed, std::uint32_t no
             bar(elapsed / static_cast<double>(AUTON_MS), 9).c_str());
 }
 
-// SHIFT covers the whole switch, including taking the cascade down before INTAKE.
 // NOMESH: in LIFT, but the intake motor isn't turning with the lift, so it isn't helping.
 static const char* ptoLabel(const PtoStatus& p) {
-    if (p.lowering || p.shifting) return "SHIFT";
+    if (p.shifting) return "SHIFT";
     if (p.mode == PtoMode::INTAKE) return "INTAKE";
     return p.noMesh ? "NOMESH" : "LIFT";
 }

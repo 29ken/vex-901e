@@ -115,7 +115,7 @@ struct LiftControl {
     std::uint32_t startTime = 0;
     bool downHeld = false;
     std::uint32_t downSince = 0;
-    bool ptoTrip = false;  // the TARGET move running is the PTO's trip to the bottom
+    bool ptoMove = false;  // the TARGET move running was started by the PTO
     LiftTop top;
 
     double height(double raw) const { return raw - zero; }
@@ -129,7 +129,7 @@ struct LiftControl {
         manualPower = power;
         if (power) {
             mode = MANUAL;
-            ptoTrip = false;
+            ptoMove = false;
         } else if (mode == MANUAL) {
             mode = IDLE;
         }
@@ -152,14 +152,13 @@ struct LiftControl {
     }
 
     // What the driver or an auton is asking the lift to do, for the PTO: +1 up,
-    // -1 down, 0 nothing. A move down to a target doesn't count: that's how the
-    // PTO itself takes the lift to the bottom.
+    // -1 down, 0 nothing. A move the PTO started itself doesn't count.
     int ask() const {
         switch (mode) {
             case MANUAL:
                 return manualPower > 0 ? 1 : manualPower < 0 ? -1 : 0;
             case TARGET:
-                return approach > 0 ? 1 : 0;
+                return ptoMove ? 0 : approach;
             case REZERO:
                 return -1;
             case IDLE:
@@ -168,23 +167,21 @@ struct LiftControl {
         return 0;
     }
 
-    // The PTO wants the lift at the bottom before it shifts to INTAKE. R1/R2
-    // come first. A preset on its way up is stopped. The trip down doesn't start
-    // while the lift is still coasting up (rpm is the lift motors' speed): the
-    // backwards-sensor check would take that for the sensor counting the wrong
-    // way. Already moving down, or no speed reading at all, it starts at once.
-    void lowerForPto(double raw, double rpm, std::uint32_t now) {
-        if (mode == TARGET && approach > 0) mode = IDLE;
-        if (mode != IDLE || (std::isfinite(rpm) && rpm > LIFT_STALL_RPM)) return;
-        down(raw, now);
-        if (mode == TARGET) ptoTrip = true;
+    // The PTO wants the cascade at this height (clamp height, after a switch to
+    // INTAKE). Anything the driver or an auton is doing comes first. It only
+    // starts from a standstill (rpm is the lift motors' speed; unreadable counts
+    // as stopped), so the backwards-sensor check never sees it coast the wrong way.
+    void moveForPto(double height_, double raw, double rpm, std::uint32_t now) {
+        if (mode != IDLE || !zeroed || backwards) return;
+        if (std::isfinite(rpm) && std::fabs(rpm) > LIFT_STALL_RPM) return;
+        driveTo(height_, raw, now);
+        ptoMove = true;
     }
 
-    // The PTO stopped asking for the bottom (it got there, or the driver changed
-    // their mind): end its trip down, if that's still what the lift is doing.
-    void endPtoTrip() {
-        if (ptoTrip && mode == TARGET) mode = IDLE;
-        ptoTrip = false;
+    // The PTO doesn't want that any more: stop its move, if that's still running.
+    void endPtoMove() {
+        if (ptoMove && mode == TARGET) mode = IDLE;
+        ptoMove = false;
     }
 
     void downButton(bool held, double raw, std::uint32_t now) {
@@ -249,7 +246,7 @@ struct LiftControl {
 
   private:
     void driveTo(double height_, double raw, std::uint32_t now) {
-        ptoTrip = false;  // lowerForPto() sets it again for its own trips
+        ptoMove = false;  // moveForPto() sets it again for its own moves
         begin(TARGET, raw, now);
         target = height_;
         approach = target > height(raw) ? 1 : -1;

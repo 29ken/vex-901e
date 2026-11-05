@@ -60,8 +60,9 @@ void opcontrol() {
             liftManual(0);
         }
 
-        // 3. Intake: B in, Y out. If the PTO is in LIFT, it takes the cascade all
-        // the way down and shifts to INTAKE first, then the intake runs.
+        // 3. Intake: B in, Y out. If the PTO is in LIFT, it shifts to INTAKE first
+        // (~0.35 s), then the intake runs while the two lift motors take the
+        // cascade to clamp height (PTO_CLAMP_HEIGHT in pto.hpp).
         if (master.get_digital(pros::E_CONTROLLER_DIGITAL_B)) {
             intakeMove(127);
         } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_Y)) {
@@ -82,6 +83,17 @@ void opcontrol() {
             claw_extended = !claw_extended;
             wrist.set_value(wrist_retracted);
             claw.set_value(claw_extended);
+        }
+
+        // 4b. The cascade reached clamp height after a switch to INTAKE: get the
+        // claw ready for what the intake brings in. Wrist down, claw open,
+        // autograb armed, as if the driver had set it up.
+        if (ptoClawReady()) {
+            wrist_retracted = false;
+            claw_extended = false;
+            wrist.set_value(wrist_retracted);
+            claw.set_value(claw_extended);
+            autograb_armed = true;
         }
 
         // 5. L1: arm/disarm the sensor + autograb
