@@ -1,8 +1,9 @@
 #!/bin/bash
 # Runs the off-robot checks on this computer: the lift (presets, bottom limit,
-# re-zeroing, top and backwards-sensor detection) against a simulated winch, then the PID
-# tuner against simulated drivetrains. Rerun after changing include/lift.hpp
-# or src/tuner.cpp.
+# re-zeroing, top and backwards-sensor detection) against a simulated winch, the
+# PTO (shifting, joining the lift, slips) against a simulated PTO, then the PID
+# tuner against simulated drivetrains. Rerun after changing include/lift.hpp,
+# include/pto.hpp or src/tuner.cpp.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
@@ -10,6 +11,9 @@ trap 'rm -rf "$out"' EXIT
 
 clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude test/lift_check.cpp -o "$out/lift"
 "$out/lift"
+
+clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude test/pto_check.cpp -o "$out/pto"
+"$out/pto"
 
 clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude -Isrc \
     -c test/tuner_sim.cpp -o "$out/sim.o"
