@@ -14,8 +14,8 @@ inline constexpr std::int8_t LEFT_11W_A = -19;
 inline constexpr std::int8_t LEFT_11W_B = -18;
 
 // Cascade lift. If the two sides fight each other, flip the sign on one.
-inline constexpr std::int8_t LIFT_LEFT  = 17;
-inline constexpr std::int8_t LIFT_RIGHT = -5;
+inline constexpr std::int8_t LIFT_LEFT  = -17;
+inline constexpr std::int8_t LIFT_RIGHT = 16;
 
 // Rotation sensor on the lift. Raising the lift should make "Lift" on the
 // brain screen go up; if it goes down, make this -4.
@@ -26,10 +26,8 @@ inline constexpr std::int8_t LIFT_SENSOR = 4;
 // pin or cone, then read "Lift" on the brain screen.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
 
-// Intake. If B pushes out instead of pulling in, make this -16.
-// The PTO also lends this motor to the lift; it works out the lift's direction
-// on its own, so flipping this only changes the intake.
-inline constexpr std::int8_t INTAKE = 16;
+// Intake. Moved off port 16 to avoid clashing with LIFT_RIGHT.
+inline constexpr std::int8_t INTAKE = 5;
 
 // PTO piston's 3-wire port (the claw is B, the wrist C).
 // TODO: make this the port the PTO solenoid is really plugged into.

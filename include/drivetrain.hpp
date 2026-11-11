@@ -1,10 +1,12 @@
 #pragma once
-#include "lemlib/api.hpp"
 #include <vector>
+#include "main.h"
+#include "rw-config.h"   // RW free functions: setPose, moveToPoint, turnToAngle, driveTo, etc.
 
-extern pros::MotorGroup leftMotors;
-extern pros::MotorGroup rightMotors;
-extern lemlib::Chassis chassis;
+// The drive motor groups that RW uses are declared in rw/devices.h as
+// left_chassis / right_chassis. These aliases keep the rest of our code working.
+extern pros::MotorGroup& leftMotors;
+extern pros::MotorGroup& rightMotors;
 
 struct MotorTemp {
     int port;

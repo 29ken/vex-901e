@@ -59,9 +59,9 @@ inline constexpr double LIFT_STALL_RPM = 5;
 inline constexpr std::uint32_t LIFT_STALL_MS = 250;
 
 // Near either end, slow down instead of slamming into it.
-inline constexpr double LIFT_SLOW_ZONE = 120;
+inline constexpr double LIFT_SLOW_ZONE = 60;
 inline constexpr double LIFT_TOP_MARGIN = 15;     // stop this far under the learned top
-inline constexpr int LIFT_SLOW_POWER = 40;
+inline constexpr int LIFT_SLOW_POWER = 100;
 
 // Everything below is the lift's logic, kept apart from the motors so
 // test/lift_check.cpp can run it against a simulated winch.

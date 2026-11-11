@@ -9,7 +9,7 @@ pros::Controller controller(pros::E_CONTROLLER_MASTER);
 bool driverBrakeHold = false;
 
 void applyDriverBrakes() {
-    chassis.setBrakeMode(driverBrakeHold ? pros::E_MOTOR_BRAKE_HOLD : pros::E_MOTOR_BRAKE_COAST);
+    stopChassis(driverBrakeHold ? pros::MotorBrake::hold : pros::MotorBrake::coast);
 }
 
 static int deadband(int value) {
@@ -52,7 +52,9 @@ void driveControl() {
     if (std::abs(leftY) < std::abs(leftX) * SIDEWAYS_ZONE) throttle = 0;
 
     currentTurn = rampTurn(currentTurn, turn * turnScale(throttle));
-    chassis.arcade(throttle, static_cast<int>(std::round(currentTurn)));
 
-    
+    // RW's driveChassis takes -12 to 12 (volts). Scale from -127..127:
+    double fwd  = throttle / 127.0 * 12.0;
+    double steer = currentTurn / 127.0 * 12.0;
+    driveChassis(fwd + steer, fwd - steer);
 }

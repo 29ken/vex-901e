@@ -2,57 +2,34 @@
 #include "config.hpp"
 #include <cmath>
 #include <cstdlib>
-
-// Blue cartridge is for the 11W motors; the 5.5Ws ignore it.
-pros::MotorGroup leftMotors({LEFT_5W, LEFT_11W_A, LEFT_11W_B}, pros::MotorGearset::blue);
-pros::MotorGroup rightMotors({RIGHT_11W_A, RIGHT_5W, RIGHT_11W_B}, pros::MotorGearset::blue);
-
-lemlib::Drivetrain drivetrain(&leftMotors,
-                              &rightMotors,
-                              TRACK_WIDTH,
-                              DRIVE_WHEEL_DIAMETER,
-                              DRIVE_RPM,
-                              HORIZONTAL_DRIFT);
-
-static lemlib::TrackingWheel* makePod(std::int8_t port, float offset) {
-    if (!port) return nullptr;
-    return new lemlib::TrackingWheel(new pros::Rotation(port), POD_WHEEL_DIAMETER, offset);
-}
-
-static pros::Imu* imu = IMU_PORT ? new pros::Imu(IMU_PORT) : nullptr;
-static lemlib::TrackingWheel* verticalPod = makePod(VERTICAL_POD_PORT, VERTICAL_POD_OFFSET);
-static lemlib::TrackingWheel* horizontalPod = makePod(HORIZONTAL_POD_PORT, HORIZONTAL_POD_OFFSET);
-
-lemlib::OdomSensors sensors(verticalPod, nullptr, horizontalPod, nullptr, imu);
-
-// kP, kI, kD, anti-windup, small error, small timeout, large error, large timeout, slew
-// A motion ends once it's within half the exact tolerance for 100 ms, or inside
-// it for 300 ms if it's creeping, so it never quits while still off target.
-lemlib::ControllerSettings lateralController(10, 0, 3, 3, DRIVE_EXACT_IN / 2, 100, DRIVE_EXACT_IN, 300, 20);
-lemlib::ControllerSettings angularController(2, 0, 10, 3, TURN_EXACT_DEG / 2, 100, TURN_EXACT_DEG, 300, 0);
-
-// deadband, min output, curve gain
-lemlib::ExpoDriveCurve throttleCurve(3, 10, 1.019);
-lemlib::ExpoDriveCurve steerCurve(3, 10, 1.019);
-
-lemlib::Chassis chassis(drivetrain, lateralController, angularController, sensors,
-                        &throttleCurve, &steerCurve);
-
+// RW uses left_chassis / right_chassis (declared in rw/devices.h, defined in
+// rw-config.cpp). The rest of our code (controls, screens) still says
+// leftMotors / rightMotors, so we alias them here.
+pros::MotorGroup& leftMotors  = left_chassis;
+pros::MotorGroup& rightMotors = right_chassis;
 void initDrive() {
-    chassis.calibrate();
-    chassis.setBrakeMode(pros::E_MOTOR_BRAKE_COAST);
+    // Set default brake mode for driver control.
+    stopChassis(pros::MotorBrake::coast);
 }
-
 void driveInches(float inches, int timeout, bool async) {
-    lemlib::Pose p = chassis.getPose(true);
-    chassis.moveToPoint(p.x + inches * std::sin(p.theta), p.y + inches * std::cos(p.theta), timeout,
-                        {.forwards = inches >= 0}, async);
+    if (async) {
+        pros::Task driveTask([inches, timeout]() {
+            driveTo(inches, timeout);
+        });
+    } else {
+        driveTo(inches, timeout);
+    }
 }
-
 void turnDegrees(float degrees, int timeout, bool async) {
-    chassis.turnToHeading(chassis.getPose().theta + degrees, timeout, {}, async);
+    double target = correct_angle + degrees;
+    if (async) {
+        pros::Task turnTask([target, timeout]() {
+            turnToAngle(target, timeout);
+        });
+    } else {
+        turnToAngle(target, timeout);
+    }
 }
-
 std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors) {
     std::vector<double> temps = motors.get_temperature_all();
     std::vector<std::int8_t> ports = motors.get_port_all();
@@ -63,3 +40,51 @@ std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors) {
     }
     return out;
 }
+
+
+// #include "drivetrain.hpp"
+// #include <cmath>
+// #include <cstdlib>
+// #include "rw-config.h"
+
+
+// // RW uses left_chassis / right_chassis (declared in rw/devices.h, defined in
+// // rw-config.cpp).  The rest of our code (controls, screens) still says
+// // leftMotors / rightMotors, so we alias them here.
+// pros::MotorGroup& leftMotors  = left_chassis;
+// pros::MotorGroup& rightMotors = right_chassis;
+
+// void initDrive() {
+//     // RW calibrates the IMU and starts odometry in runPreAutonomous()
+//     // (src/rw-user.cpp), so we don't need to do it here.
+//     // Set default brake mode for driver control.
+//     stopChassis(pros::MotorBrake::coast);
+// }
+
+// void driveInches(float inches, int timeout, bool async) {
+//     if (async) {
+//         runAsync([inches, timeout] { driveTo(inches, timeout); });
+//     } else {
+//         driveTo(inches, timeout);
+//     }
+// }
+
+// void turnDegrees(float degrees, int timeout, bool async) {
+//     double target = correct_angle + degrees;
+//     if (async) {
+//         runAsync([target, timeout] { turnToAngle(target, timeout); });
+//     } else {
+//         turnToAngle(target, timeout);
+//     }
+// }
+
+// std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors) {
+//     std::vector<double> temps = motors.get_temperature_all();
+//     std::vector<std::int8_t> ports = motors.get_port_all();
+//     std::vector<MotorTemp> out;
+//     for (std::size_t i = 0; i < temps.size(); i++) {
+//         // An unplugged motor reports a huge error value instead of a temperature.
+//         out.push_back({std::abs(ports[i]), temps[i], temps[i] < 200});
+//     }
+//     return out;
+// }

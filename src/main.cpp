@@ -29,6 +29,7 @@ void autonomous() {
 
 void opcontrol() {
 
+    heading_correction = false; //possibly remove
     pros::Controller master(pros::E_CONTROLLER_MASTER);
     pros::adi::DigitalOut wrist('C');
     pros::adi::DigitalOut claw('B');
