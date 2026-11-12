@@ -2,7 +2,6 @@
 #include "main.h"
 #include "autons.hpp"
 #include "config.hpp"
-#include "controls.hpp"
 #include "drivetrain.hpp"
 #include "pto.hpp"
 #include "tuner.hpp"
@@ -97,7 +96,7 @@ static std::string scanner(std::uint32_t now) {
 
 static Health checkMotors() {
     Health h;
-    for (pros::MotorGroup* group : {&leftMotors, &rightMotors}) {
+    for (pros::MotorGroup* group : {&left_chassis, &right_chassis}) {
         for (MotorTemp m : motorTemps(*group)) {
             h.total++;
             if (!m.plugged) {
@@ -240,7 +239,7 @@ static void drawDriver(std::uint32_t elapsed, double battery, const Health& h, s
 
 static void send() {
     if (queuedRumble) {
-        controller.rumble(queuedRumble);
+        controller_1.rumble(queuedRumble);
         queuedRumble = nullptr;
         return;
     }
@@ -248,7 +247,7 @@ static void send() {
     for (int i = 0; i < 3; i++) {
         int line = (nextLine + i) % 3;
         if (wanted[line] == shown[line]) continue;
-        controller.print(line, 0, "%-15s", wanted[line].c_str());
+        controller_1.print(line, 0, "%-15s", wanted[line].c_str());
         shown[line] = wanted[line];
         nextLine = (line + 1) % 3;
         return;
@@ -311,10 +310,10 @@ static void change(int item, int step, Phase phase, std::uint32_t now) {
 }
 
 static void handleButtons(Phase phase, std::uint32_t now) {
-    bool menu  = controller.get_digital_new_press(BTN_MENU);
-    bool next  = controller.get_digital_new_press(BTN_NEXT);
-    bool plus  = controller.get_digital_new_press(BTN_PLUS);
-    bool minus = controller.get_digital_new_press(BTN_MINUS);
+    bool menu  = controller_1.get_digital_new_press(BTN_MENU);
+    bool next  = controller_1.get_digital_new_press(BTN_NEXT);
+    bool plus  = controller_1.get_digital_new_press(BTN_PLUS);
+    bool minus = controller_1.get_digital_new_press(BTN_MINUS);
 
     if (menu) {
         menuOpen = !menuOpen;
@@ -349,7 +348,7 @@ static void loop() {
         std::uint32_t now = pros::millis();
 
         // After a radio dropout the screen is blank, so redraw everything.
-        if (!controller.is_connected()) {
+        if (!controller_1.is_connected()) {
             for (std::string& s : shown) s = "?";
             pros::delay(50);
             continue;

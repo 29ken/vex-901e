@@ -1,20 +1,19 @@
 #pragma once
 #include <vector>
 #include "main.h"
-#include "rw-config.h"   // RW free functions: setPose, moveToPoint, turnToAngle, driveTo, etc.
+#include "rw-config.h"  // RW: left_chassis, right_chassis, controller_1, moveToPoint, turnToAngle, ...
 
-// The drive motor groups that RW uses are declared in rw/devices.h as
-// left_chassis / right_chassis. These aliases keep the rest of our code working.
-extern pros::MotorGroup& leftMotors;
-extern pros::MotorGroup& rightMotors;
-
-struct MotorTemp {
-    int port;
-    double celsius;
-    bool plugged;
-};
-
+// Puts the drive in coast. Call once from initialize().
 void initDrive();
+
+// Arcade drive from the sticks, shaped by the driving-feel settings in
+// config.hpp. Call every loop in opcontrol().
+void driveControl();
+
+// The driver's brake choice from the controller menu. Autons switch to hold,
+// so opcontrol() puts this back.
+extern bool driverBrakeHold;
+void applyDriverBrakes();
 
 // Safety limits. Moves normally finish well before these.
 inline constexpr int DRIVE_TIMEOUT_MS = 3000;
@@ -26,5 +25,10 @@ inline constexpr int TURN_TIMEOUT_MS = 2000;
 void driveInches(float inches, int timeout = DRIVE_TIMEOUT_MS, bool async = false);
 void turnDegrees(float degrees, int timeout = TURN_TIMEOUT_MS, bool async = false);
 
-// One entry per motor in the group.
+struct MotorTemp {
+    int port;
+    double celsius;
+    bool plugged;
+};
+// One entry per motor in the group, for the screens.
 std::vector<MotorTemp> motorTemps(pros::MotorGroup& motors);

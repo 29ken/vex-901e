@@ -1,6 +1,5 @@
 #include "main.h"
 #include "drivetrain.hpp"
-#include "controls.hpp"
 #include "autons.hpp"
 #include "config.hpp"
 #include "lift.hpp"

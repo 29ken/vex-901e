@@ -29,8 +29,8 @@ static void draw() {
 
     if (!BRAIN_UI) return;
 
-    printSide(3, "L", leftMotors);
-    printSide(4, "R", rightMotors);
+    printSide(3, "L", left_chassis);
+    printSide(4, "R", right_chassis);
     
     // Raise the lift by hand to a pin or cone and read this number for LIFT_PRESETS.
     LiftStatus l = liftStatus();

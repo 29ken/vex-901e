@@ -1,6 +1,5 @@
 #include "tuner.hpp"
 #include "config.hpp"
-#include "controls.hpp"
 #include "drivetrain.hpp"
 #include "rw-config.h"
 #include <algorithm>
@@ -49,9 +48,9 @@ static std::atomic<bool> calConfirmed{false};
 
 static bool shouldStop() {
     return stopRequested ||
-           std::abs(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y)) > ABORT_STICK ||
-           std::abs(controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_X)) > ABORT_STICK ||
-           std::abs(controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X)) > ABORT_STICK;
+           std::abs(controller_1.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y)) > ABORT_STICK ||
+           std::abs(controller_1.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_X)) > ABORT_STICK ||
+           std::abs(controller_1.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X)) > ABORT_STICK;
 }
 
 static bool claim(TuneKind kind) {
@@ -259,8 +258,8 @@ void startTurnTune() {
         if (!turnTune.ok) {
             turnTune = relay(heading,
                              [](int power) {
-                                 leftMotors.move(power);
-                                 rightMotors.move(-power);
+                                 left_chassis.move(power);
+                                 right_chassis.move(-power);
                              },
                              TURN_POWER, TURN_HYSTERESIS);
         }
@@ -293,8 +292,8 @@ void startMoveTune() {
         if (!moveTune.ok) {
             moveTune = relay(distance,
                              [](int power) {
-                                 leftMotors.move(power);
-                                 rightMotors.move(power);
+                                 left_chassis.move(power);
+                                 right_chassis.move(power);
                              },
                              MOVE_POWER, MOVE_HYSTERESIS);
         }
@@ -319,9 +318,9 @@ static void calibrate(TuneKind kind, CalResult& result, Measure measure, Finish 
     result.done = false;
 
     pros::Task task([&result, measure, finish] {
-        pros::MotorBrake brake = leftMotors.get_brake_mode();
-        leftMotors.set_brake_mode_all(pros::MotorBrake::coast);
-        rightMotors.set_brake_mode_all(pros::MotorBrake::coast);
+        pros::MotorBrake brake = left_chassis.get_brake_mode();
+        left_chassis.set_brake_mode_all(pros::MotorBrake::coast);
+        right_chassis.set_brake_mode_all(pros::MotorBrake::coast);
 
         calReading = 0;
         while (!calConfirmed && !shouldStop()) {
@@ -334,8 +333,8 @@ static void calibrate(TuneKind kind, CalResult& result, Measure measure, Finish 
             result.done = true;
         }
 
-        leftMotors.set_brake_mode_all(brake);
-        rightMotors.set_brake_mode_all(brake);
+        left_chassis.set_brake_mode_all(brake);
+        right_chassis.set_brake_mode_all(brake);
         tuning = TUNE_NONE;
     });
 }
