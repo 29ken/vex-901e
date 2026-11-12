@@ -45,6 +45,8 @@ struct Sim {
     Where where = ON_INTAKE;
     PtoMode goingTo = PtoMode::INTAKE;
     std::uint32_t arrives = 0;
+    std::uint32_t leavesWinch = 0; // going to INTAKE, the winch's teeth hold the gear until then
+    bool sliding = false;          // fired toward the winch and not in its teeth yet
     double toothLeft = 0;          // degrees the gear still has to turn to drop in
 
     double liftW = 0, ptoW = 0;    // real speeds in motor rpm, lift + is up
@@ -70,6 +72,8 @@ struct Sim {
     int fights = 0;            // ticks the intake motor pushed against the lift motors
     int intakeOnWinch = 0;     // ticks the intake motor ran for the intake with its gear on the winch
     int movesInIntake = 0;     // ticks the lift was sent power in INTAKE, other than to clamp height
+    int grinds = 0;            // ticks the lift was sent power with the gear sliding onto the winch
+    int drags = 0;             // ticks the lift went for clamp height with the gear still on the winch
     int clawReadies = 0;       // times the driver loop got the claw ready
     bool wristDown = false, clawOpen = true, autograbArmed = false;
     int pistonMoves = 0;
@@ -164,7 +168,10 @@ struct Sim {
             fastestAtFire = std::max(fastestAtFire, std::max(std::fabs(liftW), std::fabs(ptoW)));
             if (pistonWorks) {
                 goingTo = out.piston;
-                where = BETWEEN;
+                // Leaving the winch, the gear stays in its teeth for the first half of the stroke.
+                leavesWinch = where == ON_WINCH && goingTo == PtoMode::INTAKE ? now + strokeMs / 2 : 0;
+                where = leavesWinch ? ON_WINCH : BETWEEN;
+                sliding = goingTo == PtoMode::LIFT;
                 arrives = now + strokeMs;
                 toothLeft = toothOnTooth ? 8 : 0;
             }
@@ -173,6 +180,8 @@ struct Sim {
         brake = out.brake;
         bool intakeJob = c.phase == PtoControl::READY && c.target == PtoMode::INTAKE;
         if (where == ON_WINCH && intakeJob && ptoPower != 0) intakeOnWinch++;
+        if (enabled && power != 0 && sliding) grinds++;
+        if (enabled && power != 0 && where == ON_WINCH && intakeJob) drags++;
         physics(enabled ? power : 0);
         if (intakeJob && c.settled && !c.toClamp && enabled && power != 0) movesInIntake++;
         highestEver = std::max(highestEver, height);
@@ -209,7 +218,10 @@ struct Sim {
         }
 
         // The intake motor: locked to the winch when its gear is on it, otherwise on its own.
-        if (onWinch) {
+        if (onWinch && leavesWinch && now >= leavesWinch) {
+            where = BETWEEN;
+            leavesWinch = 0;
+        } else if (onWinch) {
             ptoW = wiring * liftW;
             return;
         }
@@ -225,7 +237,10 @@ struct Sim {
             // Pressed against the other gear: drops in once it has turned past the tooth.
             double other = goingTo == PtoMode::LIFT ? wiring * liftW : 0;
             toothLeft -= std::fabs(ptoW - other) * 6 * dt;
-            if (toothLeft <= 0) where = goingTo == PtoMode::LIFT ? ON_WINCH : ON_INTAKE;
+            if (toothLeft <= 0) {
+                where = goingTo == PtoMode::LIFT ? ON_WINCH : ON_INTAKE;
+                sliding = false;
+            }
         }
     }
 
@@ -254,6 +269,7 @@ struct Sim {
     void checks() const {
         assert(!lc.backwards);
         assert(fights == 0 && intakeOnWinch == 0 && movesInIntake == 0);
+        assert(grinds == 0 && drags == 0);
         assert(fastestAtFire < PTO_STILL_RPM);
         assert(shortestGapAtFire >= PTO_SETTLE_MS);
     }
@@ -466,11 +482,37 @@ static void changing_its_mind() {
     u.c.shift(PtoMode::LIFT);
     std::uint32_t start = u.now;
     u.settle();
-    assert(u.c.target == PtoMode::LIFT && u.now - start >= PTO_SHIFT_MS && u.where == Sim::ON_WINCH);
+    assert(u.c.target == PtoMode::LIFT && u.c.lastShiftLatched && u.where == Sim::ON_WINCH);
     s.checks();
     t.checks();
     u.checks();
     std::printf("  changing its mind mid-shift ends up where it was told, gear fully in\n");
+}
+
+// However long the piston takes, and with the gear landing tooth-on-tooth, the
+// cascade only moves once the gear has latched: in the winch's teeth for LIFT,
+// clear of them for INTAKE. A quick latch doesn't wait the whole PTO_SHIFT_MS.
+static void waits_for_the_gear_to_latch(std::uint32_t strokeMs) {
+    Sim s;
+    s.strokeMs = strokeMs;
+    s.toothOnTooth = true;
+    s.liftCmd = 127;
+    std::uint32_t start = s.now;
+    while (s.height < 1) {
+        s.step();
+        assert(s.now - start < 2000);
+    }
+    std::uint32_t lifted = s.now - start;
+    s.raiseTo(800);
+    s.intake = 127;
+    start = s.now;
+    s.settle();
+    std::uint32_t freed = s.now - start;
+    s.run(3000);
+    assert(s.clawReadies == 1);
+    s.checks();  // no grinds or drags
+    std::printf("  %u ms piston, tooth-on-tooth: R2 lifted after %u ms, B freed the cascade after %u ms\n",
+                static_cast<unsigned>(strokeMs), static_cast<unsigned>(lifted), static_cast<unsigned>(freed));
 }
 
 static void stuck_missing_or_lying_readings() {
@@ -521,7 +563,7 @@ static void disabled_mid_shift_starts_over() {
     s.enabled = true;
     std::uint32_t start = s.now;
     s.settle();
-    assert(s.now - start >= PTO_SHIFT_MS);  // the turn into the teeth ran again
+    assert(s.now - start >= PTO_LATCH_MIN_MS && s.c.lastShiftLatched);  // the shift ran again
     s.liftCmd = 127;
     s.run(800);
     assert(s.c.pushing && s.where == Sim::ON_WINCH);
@@ -571,6 +613,7 @@ static void no_air_shows_nomesh(double liftTau, int power) {
     // turning with the lift.
     assert(s.c.target == PtoMode::LIFT && !s.c.pushing && s.c.meshes == 0 && s.ptoPower == 0);
     assert(s.c.noMesh && s.height > 100);  // the cascade still works on its two motors
+    assert(s.c.shifts == 1 && !s.c.lastShiftLatched);  // and the terminal said why
     s.liftCmd = 0;
     s.intake = 127;
     s.settle();
@@ -699,6 +742,8 @@ int main() {
     r1_at_the_bottom_does_nothing();
     the_piston_waits_for_the_cascade_to_stop();
     changing_its_mind();
+    waits_for_the_gear_to_latch(60);
+    waits_for_the_gear_to_latch(400);
     stuck_missing_or_lying_readings();
     disabled_mid_shift_starts_over();
     no_air_shows_nomesh(0.05, 127);

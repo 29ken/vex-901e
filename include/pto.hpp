@@ -29,9 +29,13 @@
 // driver can get into LIFT on the way to the goal and skip the pause.
 //
 // A shift holds the cascade still and stops the motor, fires the piston, then
-// turns the gear slowly so it drops into the teeth: about 0.35 s. The gear can't
-// slide into a turning winch or intake without the teeth clashing, so that pause
-// can't be skipped, only shortened (PTO_SHIFT_MS).
+// turns the gear slowly (PTO_JOG_POWER, the way B turns it) so it drops into the
+// teeth. The cascade stays held until the gear has latched: going to LIFT, the
+// slow turn stops dead once the gear is in the held winch's teeth; going to
+// INTAKE, it turns freely once the gear is off the winch. That's usually about
+// 0.2 s. If it never shows (no air, say), the cascade is let go after
+// PTO_SHIFT_MS anyway and runs on its two motors. The gear can't slide into a
+// turning winch or intake without the teeth clashing, so the pause can't be skipped.
 //
 // In LIFT the motor doesn't push until it's been seen turning with the lift. That
 // also shows which way it has to push, so there is no direction to set, and it
@@ -39,15 +43,16 @@
 //
 // The lift task runs the PTO (ptoStep), so both get their power in the same 10 ms tick.
 //
-// First time on the robot, with it up on a stand:
-//   1. Tap R2. The gear should slide onto the winch. If it slides the other way,
-//      flip PTO_PISTON_LIFT in config.hpp.
+// First time on the robot, with it up on a stand. To try shifting on its own
+// first, set PTO_FOLLOW_DRIVER to false so only DOWN shifts.
+//   1. Tap R2 (or DOWN). The gear should slide onto the winch. If it slides the
+//      other way, flip PTO_PISTON_LIFT in config.hpp. The terminal prints how
+//      long the shift took and whether it saw the gear latch.
 //   2. Hold R2 for a moment. The terminal prints "PTO meshed with the lift" and
 //      from then on the intake motor lifts too. If the controller shows NOMESH
 //      instead, check the air and PTO_PISTON in config.hpp.
 //   3. Measure PTO_CLAMP_HEIGHT (see below), then press B. The gear slides back,
 //      the intake runs, the cascade goes to clamp height and the claw gets ready.
-//   4. Lower PTO_SHIFT_MS until a shift now and then ends in NOMESH, then add 50.
 
 enum class PtoMode { INTAKE, LIFT };
 
@@ -129,13 +134,19 @@ inline constexpr double PTO_STILL_RPM = 10;
 // ...unless this long has passed since the shift began (a speed reading that
 // never settles).
 inline constexpr std::uint32_t PTO_STOP_TIMEOUT_MS = 250;
-// From firing the piston until the gear counts as in. Covers the piston's travel
-// plus finding the teeth.
-inline constexpr std::uint32_t PTO_SHIFT_MS = 300;
+// The longest a shift waits for the gear to latch after firing the piston.
+inline constexpr std::uint32_t PTO_SHIFT_MS = 600;
 // Power the gear turns at during a shift, so it drops into the teeth instead of
 // sitting tooth-on-tooth. About 15 rpm, one tooth per 0.1 s; far too weak to move
-// the lift, which is held still.
+// the lift, which is held still. + is the way B turns it, both ways of shifting.
 inline constexpr int PTO_JOG_POWER = 20;
+// It counts as latched once the piston has had PTO_LATCH_MIN_MS to move and
+// then, for PTO_LATCH_MS, the intake motor reads under PTO_LATCH_RPM going to
+// LIFT (stopped by the held winch) or over it going to INTAKE (turning freely).
+// PTO_LATCH_RPM is about half what the slow turn reaches with nothing stopping it.
+inline constexpr std::uint32_t PTO_LATCH_MIN_MS = 150;
+inline constexpr std::uint32_t PTO_LATCH_MS = 50;
+inline constexpr double PTO_LATCH_RPM = 7;
 
 // In LIFT, the intake motor counts as turning with the lift when its speed is
 // within this fraction of the lift's speed of it, give or take PTO_STEP_RPM.
@@ -221,6 +232,12 @@ struct PtoControl {
     int lastIntakePower = 0;
     int lastLiftAsk = 0;
 
+    // Shifts finished, for the terminal: how long the last one took, and whether
+    // it saw the gear latch or gave up waiting.
+    int shifts = 0;
+    std::uint32_t lastShiftMs = 0;
+    bool lastShiftLatched = false;
+
     // The lift may do anything while the gear is on the winch and staying there.
     // In INTAKE it only moves on the way to clamp height, and only by the PTO's
     // own move, so a stale R2 still held can't raise it on two motors.
@@ -283,14 +300,20 @@ struct PtoControl {
                 begin(SHIFTING);
                 phaseTime.held(true, in.now);
             }
-        } else if (phase == SHIFTING && inPhase >= PTO_SHIFT_MS) {
-            phase = READY;
-            settled = true;
-            clearTimers();
-            if (target == PtoMode::INTAKE) {
-                toClamp = true;  // now the lift motors take it to clamp height
-                clampTime.on = false;
-                clampSettle.on = false;
+        } else if (phase == SHIFTING) {
+            bool gearIn = latched(in, inPhase);
+            if (gearIn || inPhase >= PTO_SHIFT_MS) {
+                shifts++;
+                lastShiftMs = inPhase;
+                lastShiftLatched = gearIn;
+                phase = READY;
+                settled = true;
+                clearTimers();
+                if (target == PtoMode::INTAKE) {
+                    toClamp = true;  // now the lift motors take it to clamp height
+                    clampTime.on = false;
+                    clampSettle.on = false;
+                }
             }
         }
         if (phase == READY && target == PtoMode::LIFT) watchLift(in);
@@ -305,7 +328,16 @@ struct PtoControl {
     }
 
   private:
-    PtoTimer phaseTime, liftHeldFor, agreeing, moving, outOfStep;
+    PtoTimer phaseTime, liftHeldFor, agreeing, moving, outOfStep, latchTime;
+
+    // The slow turn shows when the gear is in: on the held winch it stops dead;
+    // off the winch nothing holds it, so it turns.
+    bool latched(const PtoInput& in, std::uint32_t inPhase) {
+        bool known = std::isfinite(in.ptoRpm);
+        bool turning = known && std::fabs(in.ptoRpm) >= PTO_LATCH_RPM;
+        bool looksIn = known && inPhase >= PTO_LATCH_MIN_MS && (target == PtoMode::LIFT ? !turning : turning);
+        return latchTime.held(looksIn, in.now) >= PTO_LATCH_MS;
+    }
     PtoTimer clampTime, clampSettle;  // not phase timers: clearTimers() leaves them alone
 
     void watchClamp(const PtoInput& in) {
@@ -331,6 +363,7 @@ struct PtoControl {
         agreeing.on = false;
         moving.on = false;
         outOfStep.on = false;
+        latchTime.on = false;
     }
 
     static bool still(const PtoInput& in) {
