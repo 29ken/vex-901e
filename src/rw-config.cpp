@@ -24,7 +24,7 @@ pros::Rotation vertical_tracker(6);
 pros::Distance front_sensor(12);
 pros::Distance left_sensor(13);
 pros::Distance right_sensor(14);
-pros::Distance back_sensor(15);
+pros::Distance back_sensor(21);  // not 15: that is the radio
 
 // ============================================================================
 // USER-CONFIGURABLE PARAMETERS (CHANGE BEFORE USING THIS TEMPLATE)
