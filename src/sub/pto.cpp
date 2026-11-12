@@ -15,7 +15,7 @@ static int intakePower = 0;
 // Only the lift task touches these.
 static PtoMode sentPiston = PtoMode::INTAKE;
 static pros::motor_brake_mode_e_t sentBrake = pros::E_MOTOR_BRAKE_COAST;
-static int saidMeshes = 0, saidSlips = 0, saidClampGaveUp = 0;
+static int saidMeshes = 0, saidSlips = 0, saidClampGaveUp = 0, saidShifts = 0;
 static int clawReadyTaken = 0;  // clamp-height arrivals the driver loop has acted on
 static bool saidNoMesh = false;
 
@@ -52,6 +52,18 @@ PtoLiftRequest ptoStep(const PtoLiftTick& tick) {
         in.ptoRpm = ptoRpm;
         out = control.update(in);
 
+        if (control.shifts != saidShifts) {
+            const char* to = control.target == PtoMode::LIFT ? "LIFT" : "INTAKE";
+            if (control.lastShiftLatched) {
+                std::printf("PTO shifted to %s: gear latched %u ms after the piston fired\n", to,
+                            static_cast<unsigned>(control.lastShiftMs));
+            } else {
+                std::printf("PTO shifted to %s without seeing the gear latch in %u ms: check the air, "
+                            "PTO_PISTON, and PTO_LATCH_RPM in pto.hpp\n",
+                            to, static_cast<unsigned>(PTO_SHIFT_MS));
+            }
+            saidShifts = control.shifts;
+        }
         if (control.meshes != saidMeshes) {
             std::printf("PTO meshed with the lift; intake motor power %+d raises it\n", control.dir);
             saidMeshes = control.meshes;

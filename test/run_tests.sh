@@ -9,13 +9,13 @@ cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 
-clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude test/lift_check.cpp -o "$out/lift"
+clang++ -std=c++20 -Iinclude test/lift_check.cpp -o "$out/lift"
 "$out/lift"
 
-clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude test/pto_check.cpp -o "$out/pto"
+clang++ -std=c++20 -Iinclude test/pto_check.cpp -o "$out/pto"
 "$out/pto"
 
-clang++ -std=c++20 -D_PROS_INCLUDE_LIBLVGL_LLEMU_HPP -Iinclude -Isrc \
+clang++ -std=c++20 -Iinclude -Isrc \
     -c test/tuner_sim.cpp -o "$out/sim.o"
 
 # The tuner references robot hardware (motors, chassis, tasks) the sim never

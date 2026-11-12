@@ -32,9 +32,10 @@ inline constexpr std::int8_t INTAKE = 5;
 // PTO piston's 3-wire port (the claw is B, the wrist C).
 // TODO: make this the port the PTO solenoid is really plugged into.
 inline constexpr char PTO_PISTON = 'A';
-// The solenoid value that slides the gear onto the winch (LIFT). If DOWN moves
-// the gear the wrong way, make this false.
-inline constexpr bool PTO_PISTON_LIFT = true;
+// The solenoid value that slides the gear onto the winch (LIFT). LIFT pulls the
+// piston back, which is false on a normal solenoid. If DOWN moves the gear the
+// wrong way, make this true.
+inline constexpr bool PTO_PISTON_LIFT = false;
 
 // Port 15 is the radio.
 
