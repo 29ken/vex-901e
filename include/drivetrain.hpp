@@ -3,7 +3,8 @@
 #include "main.h"
 #include "rw-config.h"  // RW: left_chassis, right_chassis, controller_1, moveToPoint, turnToAngle, ...
 
-// Puts the drive in coast. Call once from initialize().
+// Calibrates the IMU, starts RW's odometry and puts the drive in coast. Call
+// once from initialize().
 void initDrive();
 
 // Arcade drive from the sticks, shaped by the driving-feel settings in

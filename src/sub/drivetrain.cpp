@@ -6,6 +6,10 @@
 bool driverBrakeHold = false;
 
 void initDrive() {
+    // RW's odometry, which every auton move and the brain screen's X/Y/H need:
+    // calibrate the IMU (about 2 s, so keep the robot still), then start tracking.
+    inertial_sensor.reset(true);
+    startOdometry();
     stopChassis(pros::MotorBrake::coast);
 }
 
