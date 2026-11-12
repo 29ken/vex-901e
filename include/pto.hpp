@@ -8,13 +8,13 @@
 
 // The PTO lends the intake motor to the lift. One piston slides the motor's
 // 36T gear between two jobs:
-//   INTAKE (piston retracted): the gear is on the intake's 36T, so B and Y run
+//   INTAKE (piston extended):  the gear is on the intake's 36T, so B and Y run
 //                              the intake. The two lift motors take the cascade
 //                              to PTO_CLAMP_HEIGHT and hold it there, and the
 //                              claw gets ready (wrist down, claw open, autograb
 //                              armed) to clamp what the intake brings in.
-//   LIFT   (piston extended):  the gear is on the winch's 12T, so the motor is a
-//                              third lift motor. R1/R2 and every limit in
+//   LIFT   (piston pulled back): the gear is on the winch's 12T, so the motor is
+//                              a third lift motor. R1/R2 and every limit in
 //                              lift.hpp drive all three.
 // Both lift motors and this one reach the winch at 300 rpm (100 rpm x 36/12), so
 // in LIFT it just gets the same power they do. That only holds while all three
