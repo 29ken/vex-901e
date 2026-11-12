@@ -368,16 +368,11 @@ void startTurnCal() {
                   return static_cast<float>(getInertialHeading() - startAngle);
               },
               [](float measured) {
-                  std::printf("Turn cal: odom read %.2f deg for 360\n", measured);
-                  if (IMU_PORT) {
-                      turnCal.label = "IMU%";
-                      turnCal.value = (measured - 360) / 360 * 100;
-                      std::printf("  IMU is off by %+.2f%%. Set imu_scale in rw-config.cpp.\n", turnCal.value);
-                  } else {
-                      turnCal.label = "TRACK";
-                      turnCal.value = distance_between_wheels * measured / 360;
-                      std::printf("  paste into rw-config.cpp: distance_between_wheels = %.4f;\n", turnCal.value);
-                  }
+                  // RW's heading is the IMU's, already times imu_scale.
+                  std::printf("Turn cal: the IMU read %.2f deg for 360\n", measured);
+                  turnCal.label = "IMU";
+                  turnCal.value = imu_scale * 360 / measured;
+                  std::printf("  paste into rw-config.cpp: imu_scale = %.4f;\n", turnCal.value);
               });
 }
 

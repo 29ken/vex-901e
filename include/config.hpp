@@ -1,17 +1,9 @@
 #pragma once
 #include <cstdint>
 
-// Ports and tuning constants. Negative port = motor is reversed.
-
-// Right drive
-inline constexpr std::int8_t RIGHT_5W    = 10;
-inline constexpr std::int8_t RIGHT_11W_A = 9;
-inline constexpr std::int8_t RIGHT_11W_B = 8;
-
-// Left drive, all mounted backwards
-inline constexpr std::int8_t LEFT_5W    = -20;
-inline constexpr std::int8_t LEFT_11W_A = -19;
-inline constexpr std::int8_t LEFT_11W_B = -18;
+// Our ports and settings. The drive, IMU, odom pods and distance sensors, and
+// RW's own tuning, are in src/rw-config.cpp. Negative port = motor is reversed.
+// Port 15 is the radio.
 
 // Cascade lift. If the two sides fight each other, flip the sign on one.
 inline constexpr std::int8_t LIFT_LEFT  = -17;
@@ -37,26 +29,8 @@ inline constexpr char PTO_PISTON = 'A';
 // wrong way, make this true.
 inline constexpr bool PTO_PISTON_LIFT = false;
 
-// Port 15 is the radio.
-
-// "Cal turn" and "Cal dist" in the controller menu measure the real values
-// for these. Paste what they print, then re-upload.
-inline constexpr float TRACK_WIDTH          = 11.5f;
-inline constexpr float DRIVE_WHEEL_DIAMETER = 2.75f;
-inline constexpr float DRIVE_RPM            = 450.0f;
-inline constexpr float HORIZONTAL_DRIFT     = 2.0f;   // 8 if we ever put traction wheels on
-
-// Odom sensors. Leave a port at 0 until it's plugged in; LemLib falls back to
-// the drive encoders for anything missing.
-inline constexpr std::uint8_t IMU_PORT            = 0;
-inline constexpr std::int8_t  VERTICAL_POD_PORT   = 6;  // rotation sensor, negative = reversed
-inline constexpr std::int8_t  HORIZONTAL_POD_PORT = 7;
-inline constexpr float POD_WHEEL_DIAMETER    = 2.125f;  // "Cal dist" measures this once the pod is in
-inline constexpr float VERTICAL_POD_OFFSET   = 0.0f;    // inches from center of rotation, left is negative
-inline constexpr float HORIZONTAL_POD_OFFSET = -0.26f;  // inches from center of rotation, behind is negative
-
-// How close driveInches() / turnDegrees() land. The PID tuner adjusts until
-// test moves land inside these. Tighter = more exact, but slower to finish.
+// How close the PID tuner's test moves have to land. Tighter = more exact, but
+// slower to finish.
 inline constexpr float DRIVE_EXACT_IN = 0.25f;
 inline constexpr float TURN_EXACT_DEG = 0.5f;
 
