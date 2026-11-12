@@ -5,8 +5,6 @@
 #include "config.hpp"
 #include "lift.hpp"
 #include "pto.hpp"
-#include "pros/adi.hpp"
-#include "pros/misc.h"
 #include "tuner.hpp"
 #include "screens.hpp"
 

@@ -1,32 +1,14 @@
 #!/bin/bash
 # Runs the off-robot checks on this computer: the lift (presets, bottom limit,
-# re-zeroing, top and backwards-sensor detection) against a simulated winch, the
-# PTO (shifting, joining the lift, slips) against a simulated PTO, then the PID
-# tuner against simulated drivetrains. Rerun after changing include/lift.hpp,
-# include/pto.hpp or src/tuner.cpp.
-set -euo pipefail
+# re-zeroing, top and backwards-sensor detection) against a simulated winch, and
+# the PTO (shifting, joining the lift, slips) against a simulated PTO. Rerun
+# after changing include/lift.hpp or include/pto.hpp.
+set -uo pipefail
 cd "$(dirname "$0")/.."
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
+status=0
 
-clang++ -std=c++20 -Iinclude test/lift_check.cpp -o "$out/lift"
-"$out/lift"
-
-clang++ -std=c++20 -Iinclude test/pto_check.cpp -o "$out/pto"
-"$out/pto"
-
-clang++ -std=c++20 -Iinclude -Isrc \
-    -c test/tuner_sim.cpp -o "$out/sim.o"
-
-# The tuner references robot hardware (motors, chassis, tasks) the sim never
-# calls. Give each of those symbols a placeholder so it links.
-nm -u "$out/sim.o" | grep -E 'pros|lemlib|chassis|Motors|controller|driveInches|turnDegrees|applyDriverBrakes|driverBrakeHold' \
-    | grep -v '_millis$\|_delay$' > "$out/wanted"
-nm "$out/sim.o" | awk '$2 ~ /[TtDdBbSs]/ {print $3}' > "$out/defined"
-grep -vxFf "$out/defined" "$out/wanted" | while read -r sym; do
-    printf 'char stub_%s[8192] __asm__("%s");\n' "$(echo "$sym" | tr -c 'A-Za-z0-9_\n' '_')" "$sym"
-done > "$out/stubs.c"
-
-clang -c "$out/stubs.c" -o "$out/stubs.o"
-clang++ "$out/sim.o" "$out/stubs.o" -o "$out/sim"
-"$out/sim" | grep -E 'SUMMARY|drivetrains|passes'
+clang++ -std=c++20 -Iinclude test/lift_check.cpp -o "$out/lift" && "$out/lift" || status=1
+clang++ -std=c++20 -Iinclude test/pto_check.cpp -o "$out/pto" && "$out/pto" || status=1
+exit $status

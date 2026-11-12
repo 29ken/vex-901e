@@ -25,10 +25,6 @@ pros::Distance left_sensor(13);
 pros::Distance right_sensor(14);
 pros::Distance back_sensor(15);
 
-// Your own devices
-pros::Motor intake_motor(5, pros::MotorGearset::green);
-pros::Distance intake_distance(3);
-
 // ============================================================================
 // USER-CONFIGURABLE PARAMETERS (CHANGE BEFORE USING THIS TEMPLATE)
 // ============================================================================
