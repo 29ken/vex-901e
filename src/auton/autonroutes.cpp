@@ -132,3 +132,24 @@ static void skills() {
     moveToPoint(-24, -62, 1, 1000);
     moveToPoint(-24, -59, 1, 1000);
 } // X 3 pin matchload
+
+// The brain screen's selector lists these in order; runAuton() runs the one picked.
+const Auton autons[] = {
+    {"None", none},
+    {"Red Left", redLeft5pin},
+    {"Red Right", redRight},
+    {"Red Right 2pin", redRight2pin},
+    {"Red Left 4pin", redLeft4pin},
+    {"Blue Left", blueLeft},
+    {"Blue Right", blueRight},
+    {"Skills", skills},
+};
+const int autonCount = sizeof(autons) / sizeof(autons[0]);
+int selectedAuton = 0;
+
+void runAuton() {
+    // Hold so the robot stops dead at the end of each move instead of rolling on.
+    stopChassis(pros::MotorBrake::hold);
+    setPose(0, 0, 0);  // autons can override this
+    autons[selectedAuton].run();
+}

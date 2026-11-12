@@ -3,10 +3,9 @@
 
 // Everything that makes "drive 10 in" land on 10 in. Do them in order:
 //   1. Cal dist and Cal turn, so odom measures true inches and degrees.
-//      Paste the printed values into config.hpp and re-upload.
 //   2. Turn PID, then Move PID. Each finds gains, then keeps adjusting them
 //      until test moves land within DRIVE_EXACT_IN / TURN_EXACT_DEG.
-//      Paste the printed gains into drivetrain.cpp.
+// Each prints a line to paste into src/rw-config.cpp; re-upload after.
 
 enum TuneKind { TUNE_NONE, TUNE_TURN, TUNE_MOVE, TUNE_CAL_DIST, TUNE_CAL_TURN };
 

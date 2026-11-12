@@ -8,26 +8,23 @@
 
 pros::Controller controller_1(pros::E_CONTROLLER_MASTER);
 
-// Drive motors: negative port = reversed. Match config.hpp ports.
-// 11W motors first so RW reads drive encoders from the right gearing.
-pros::MotorGroup left_chassis({-19, -20, -18}, pros::MotorGearset::blue);   // LEFT_11W_A, LEFT_5W, LEFT_11W_B
-pros::MotorGroup right_chassis({9, 10, 8}, pros::MotorGearset::blue);       // RIGHT_11W_A, RIGHT_5W, RIGHT_11W_B
+// Drive motors: negative port = reversed. 11W on 19/18 and 9/8, 5.5W on 20 and
+// 10; the left side is mounted backwards. 11W motors first so RW reads the drive
+// encoders from the right gearing.
+pros::MotorGroup left_chassis({-19, -20, -18}, pros::MotorGearset::blue);
+pros::MotorGroup right_chassis({9, 10, 8}, pros::MotorGearset::blue);
 
-pros::Imu inertial_sensor(11);  // give it a free port (IMU_PORT is 0 in config.hpp = no IMU yet)
+pros::Imu inertial_sensor(11);  // TODO: the IMU's real port. RW needs it for every heading
 
 // Tracking wheels
-pros::Rotation horizontal_tracker(7);    // HORIZONTAL_POD_PORT from config.hpp
-pros::Rotation vertical_tracker(6);      // VERTICAL_POD_PORT from config.hpp
+pros::Rotation horizontal_tracker(7);
+pros::Rotation vertical_tracker(6);
 
 // Distance reset sensors (give unused ones any free port)
 pros::Distance front_sensor(12);
 pros::Distance left_sensor(13);
 pros::Distance right_sensor(14);
-pros::Distance back_sensor(15);
-
-// Your own devices
-pros::Motor intake_motor(5, pros::MotorGearset::green);
-pros::Distance intake_distance(3);
+pros::Distance back_sensor(21);  // not 15: that is the radio
 
 // ============================================================================
 // USER-CONFIGURABLE PARAMETERS (CHANGE BEFORE USING THIS TEMPLATE)
@@ -54,11 +51,10 @@ bool using_vertical_tracker = true;    // You have one on port 6
 
 // IGNORE THESE IF YOU ARE NOT USING TRACKING WHEELS
 // These comments are in the perspective of a top down view of the robot when the robot is facing vertical
-// Tracking wheel offsets — matched from config.hpp
-double horizontal_tracker_dist_from_center = -0.26;   // HORIZONTAL_POD_OFFSET
-double vertical_tracker_dist_from_center = 0.0;       // VERTICAL_POD_OFFSET
-double horizontal_tracker_diameter = 2.125;            // POD_WHEEL_DIAMETER
-double vertical_tracker_diameter = 2.125;              // POD_WHEEL_DIAMETER
+double horizontal_tracker_dist_from_center = -0.26;
+double vertical_tracker_dist_from_center = 0.0;
+double horizontal_tracker_diameter = 2.125;  // "Cal dist" in the controller menu measures these
+double vertical_tracker_diameter = 2.125;
 
 // Distance Reset setup
 // If you are not using all four distance sensors, just set the unused ones to 0
@@ -128,7 +124,7 @@ double distance_reset_max_jump = 0;
 // For Override, about 18 keeps the corner loaders out of the readings
 double distance_reset_corner_margin = 0;
 
-// MCL (see startMcl() in src/rw-user.cpp): particle count (more = smoother but slower, up to 1000),
+// MCL (startMcl(), which nothing calls yet): particle count (more = smoother but slower, up to 1000),
 // longest distance reading it trusts (inches), and how far behind the distance sensor readings are (msec).
 // If the position lags while driving toward or away from a wall, adjust the delay.
 // The selector screen shows how long each MCL update takes; lower the particle count if it's more than a few msec

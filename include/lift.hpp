@@ -17,10 +17,10 @@ void liftManual(int power);
 void liftNextPreset();
 // Goes down to height 0 and stops there.
 void liftDown();
-// The L2 button, called every loop with whether it's held. A tap is
-// liftDown(). Holding it lowers the lift slowly past height 0; let go when it
-// touches the bottom and that becomes the new 0. Use it if the program was
-// started with the lift up.
+// A re-zero button (not on the controller right now), called every loop with
+// whether it's held. A tap is liftDown(). Holding it lowers the lift slowly past
+// height 0; let go when it touches the bottom and that becomes the new 0. Use it
+// if the program was started with the lift up.
 void liftDownButton(bool held);
 
 struct LiftStatus {
@@ -42,7 +42,7 @@ inline constexpr std::uint32_t LIFT_MOVE_TIMEOUT_MS = 3000;
 // The winch has no stop at the bottom: unwound too far, it winds the string
 // the other way and lifts the lift back up. So nothing drives below this.
 inline constexpr double LIFT_BOTTOM = 5;
-// Holding L2 this long lowers slowly past the bottom limit to re-zero.
+// Holding the re-zero button this long lowers slowly past the bottom limit.
 inline constexpr std::uint32_t LIFT_REZERO_HOLD_MS = 600;
 inline constexpr int LIFT_REZERO_POWER = 30;
 
