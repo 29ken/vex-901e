@@ -148,7 +148,7 @@ double distance_sensor_scale = 1.0;
 double drive_kS = 0.5;
 double drive_kV = 0;
 double drive_kA = 0;
-double drive_motor_rpm = 450;          // 600 (blue) geared down 36:48 = 450 effective RPM
+double drive_motor_rpm = 600;          // the 11W motors' blue cartridge. Not 450: wheel_distance_in already has the 36:48
 double profile_max_speed = 0;          // Top speed (in/s, 0 = 80% of the drive's top speed)
 double profile_max_accel = 100;        // Speed up / slow down rate (in/s^2): lower if the wheels slip
 double profile_turn_speed = 360;       // turnProfiled top speed (degrees/s)
