@@ -52,8 +52,9 @@ void opcontrol() {
             liftManual(0);
         }
 
-        // 3. A: manual toggle of the claw
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
+        // 3. A: manual toggle of the claw. While the controller menu is open
+        // (X), A is the menu's + button instead.
+        if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             claw_extended = !claw_extended;
             claw.set_value(claw_extended);
         }
