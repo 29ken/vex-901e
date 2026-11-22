@@ -213,24 +213,25 @@ static void backwards_sensor_is_caught() {
     std::printf("  backwards sensor caught on the first preset, %.0f degrees up\n", s.liftHeight());
 }
 
-static void holding_still_for_a_shift_is_not_the_top() {
-    // R2 from rest: the first reading is 0 rpm, which starts the stall clock.
-    // Then the PTO holds the lift still for longer than LIFT_STALL_MS. Picking
-    // up again from 0 rpm must not count as having stalled at the top.
+static void holding_still_while_disabled_is_not_the_top() {
+    // Going up from rest: the first reading is 0 rpm, which starts the stall
+    // clock. Then the lift is held still (enabled false, as while the robot is
+    // disabled) for longer than LIFT_STALL_MS. Picking up again from 0 rpm must
+    // not count as having stalled at the top.
     Sim s = zeroedAtBottom();
     s.c.manual(127);
     s.step();
-    s.enabled = false;  // what lift.cpp sends while the PTO shifts
+    s.enabled = false;
     s.run(400);
     s.enabled = true;
     s.run(1000);
     assert(!s.c.top.found && s.liftHeight() > 300);
-    std::printf("  held still 400 ms for a PTO shift, then up %.0f with no false top\n", s.liftHeight());
+    std::printf("  held still 400 ms, then up %.0f with no false top\n", s.liftHeight());
 }
 
 int main() {
     lifttop_basics();
-    holding_still_for_a_shift_is_not_the_top();
+    holding_still_while_disabled_is_not_the_top();
     presets_and_the_bottom_limit();
     rezero_when_started_with_the_lift_up();
     preset_above_the_top();

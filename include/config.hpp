@@ -1,9 +1,10 @@
 #pragma once
 #include <cstdint>
 
-// Our ports and settings. The drive, IMU, odom pods and distance sensors, and
-// RW's own tuning, are in src/rw-config.cpp. Negative port = motor is reversed.
-// Port 15 is the radio.
+// Our ports and settings. The drive, IMU and distance sensors, and RW's own
+// tuning, are in src/rw-config.cpp. The claw piston (3-wire B) and the
+// autograb distance sensor (port 3) are in src/main.cpp. Negative port = motor
+// is reversed. Port 15 is the radio.
 
 // Cascade lift. If the two sides fight each other, flip the sign on one.
 inline constexpr std::int8_t LIFT_LEFT  = -17;
@@ -17,17 +18,6 @@ inline constexpr std::int8_t LIFT_SENSOR = 4;
 // the bottom. To find one: raise the lift with R2 until it lines up with the
 // pin or cone, then read "Lift" on the brain screen.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
-
-// Intake. Moved off port 16 to avoid clashing with LIFT_RIGHT.
-inline constexpr std::int8_t INTAKE = 5;
-
-// PTO piston's 3-wire port (the claw is B, the wrist C).
-// TODO: make this the port the PTO solenoid is really plugged into.
-inline constexpr char PTO_PISTON = 'A';
-// The solenoid value that slides the gear onto the winch (LIFT). LIFT pulls the
-// piston back, which is false on a normal solenoid. If DOWN moves the gear the
-// wrong way, make this true.
-inline constexpr bool PTO_PISTON_LIFT = false;
 
 // How close the PID tuner's test moves have to land. Tighter = more exact, but
 // slower to finish.
