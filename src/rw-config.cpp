@@ -33,7 +33,8 @@ pros::Distance back_sensor(21);  // not 15: that is the radio
 
 // Distance between the middles of the left and right wheels of the drive (in inches)
 // (mecanum: plus the distance between the front and back wheels, see the docs: Guide > Drive Types)
-double distance_between_wheels = 11.5;
+// V4 CAD: the omni wheels' centers are at +-4.98 in.
+double distance_between_wheels = 9.96;
 
 // motor to wheel gear ratio * wheel diameter (in inches) * pi
 double wheel_distance_in = (36.0 / 48.0) * 2.75 * M_PI;
