@@ -5,6 +5,7 @@
 #include "drivetrain.hpp"
 #include "tuner.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -18,6 +19,7 @@ static constexpr std::uint32_t SPLASH_MS = 1200;
 static constexpr std::uint32_t MENU_TIMEOUT_MS = 5000;
 
 // The only buttons the menu touches. Everything else is free for mechanisms.
+// A is also the claw button; see handleButtons() for how they share it.
 static constexpr auto BTN_MENU  = pros::E_CONTROLLER_DIGITAL_X;
 static constexpr auto BTN_NEXT  = pros::E_CONTROLLER_DIGITAL_UP;
 static constexpr auto BTN_PLUS  = pros::E_CONTROLLER_DIGITAL_A;
@@ -50,7 +52,8 @@ static const char* queuedRumble = nullptr;
 static std::uint32_t phaseStart = 0;
 static std::uint32_t lastLeft = DRIVER_MS;
 
-static bool menuOpen = false;
+// The driver loop reads this too (controllerMenuOpen()), from its own task.
+static std::atomic<bool> menuOpen{false};
 static int menuItem = MENU_AUTON;
 static std::uint32_t menuTouched = 0;
 
@@ -300,11 +303,10 @@ static void change(int item, int step, Phase phase, std::uint32_t now) {
     rumble(".");
 }
 
+bool controllerMenuOpen() { return menuOpen; }
+
 static void handleButtons(Phase phase, std::uint32_t now) {
     bool menu  = controller_1.get_digital_new_press(BTN_MENU);
-    bool next  = controller_1.get_digital_new_press(BTN_NEXT);
-    bool plus  = controller_1.get_digital_new_press(BTN_PLUS);
-    bool minus = controller_1.get_digital_new_press(BTN_MINUS);
 
     if (menu) {
         menuOpen = !menuOpen;
@@ -312,6 +314,15 @@ static void handleButtons(Phase phase, std::uint32_t now) {
         // Nothing keeps running once its screen is gone; driver control would stay paused.
         if (!menuOpen) cancelTune();
     }
+
+    // A press shows up as new only once, to whichever task asks first, and the
+    // driver loop asks about A every 10 ms for the claw. So only ask about
+    // these when the menu will use them: while it's open (the driver loop
+    // leaves A alone then), or before a match (the driver loop isn't running).
+    bool listen = menuOpen || phase == Phase::PreMatch;
+    bool next  = listen && controller_1.get_digital_new_press(BTN_NEXT);
+    bool plus  = listen && controller_1.get_digital_new_press(BTN_PLUS);
+    bool minus = listen && controller_1.get_digital_new_press(BTN_MINUS);
 
     if (menuOpen) {
         if (next) menuItem = (menuItem + 1) % MENU_ITEMS;
