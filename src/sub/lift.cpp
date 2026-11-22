@@ -1,10 +1,9 @@
 #include "lift.hpp"
-#include "pto.hpp"
 #include <cstdio>
 #include <mutex>
 
-// Red 100 rpm cartridges, as in the CAD. The PTO compares these motors' speed
-// with the intake motor's, so all three have to be set the same.
+// Both motors drive the winch shaft directly (V4 CAD). Set the gearset to the
+// cartridges really in them (red = 100 rpm): the top and stall checks use rpm.
 pros::MotorGroup lift({LIFT_LEFT, LIFT_RIGHT}, pros::MotorGearset::red);
 static pros::Rotation sensor(LIFT_SENSOR);
 
@@ -33,13 +32,8 @@ static void loop() {
     while (true) {
         double raw;
         bool ok = readSensor(raw);
-        // The lift only moves while the PTO's gear is on the winch, or on its two
-        // motors on the way to clamp height. Otherwise (in INTAKE, or mid-shift)
-        // it's held still, and R1/R2 make the PTO shift to LIFT.
-        PtoLiftHold ptoHold = ptoLiftHold();
         bool disabled = pros::competition::is_disabled();
         double rpm = liftRpm();
-        PtoLiftTick tick;
         int power;
         {
             std::lock_guard<pros::Mutex> hold(mutex);
@@ -47,19 +41,12 @@ static void loop() {
             // moves still wait out the disable.
             if (disabled) control.manual(0);
             if (ok) {
-                bool mayMove = ptoHold == PtoLiftHold::FREE ||
-                               (ptoHold == PtoLiftHold::PTO_MOVE_ONLY && control.ptoMove);
-                power = control.update(raw, rpm, mayMove && !disabled, pros::millis());
+                power = control.update(raw, rpm, !disabled, pros::millis());
             } else {
                 // No sensor: presets and the bottom limit can't work, but hand control still does.
                 if (control.mode != LiftControl::MANUAL) control.mode = LiftControl::IDLE;
-                power = control.mode == LiftControl::MANUAL && ptoHold == PtoLiftHold::FREE
-                            ? control.manualPower
-                            : 0;
+                power = control.mode == LiftControl::MANUAL ? control.manualPower : 0;
             }
-            tick.ask = control.ask();
-            tick.heightKnown = ok && control.zeroed && !control.backwards;
-            tick.height = tick.heightKnown ? control.height(raw) : 0;
 
             if (control.top.found && !saidTop) {
                 std::printf("Lift top found at %.0f\n", control.height(control.top.position));
@@ -85,21 +72,6 @@ static void loop() {
             }
         }
         lift.move(power);
-
-        // The PTO runs in the same tick, so in LIFT the intake motor gets the same
-        // power. After a switch to INTAKE it has the cascade taken to clamp height.
-        tick.power = power;
-        tick.held = ptoHold == PtoLiftHold::HELD;
-        tick.rpm = rpm;
-        PtoLiftRequest want = ptoStep(tick);
-        if (ok) {
-            std::lock_guard<pros::Mutex> hold(mutex);
-            if (want.move) {
-                control.moveForPto(want.height, raw, rpm, pros::millis());
-            } else {
-                control.endPtoMove();
-            }
-        }
         pros::delay(10);
     }
 }

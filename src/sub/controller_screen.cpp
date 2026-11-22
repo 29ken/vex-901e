@@ -3,7 +3,6 @@
 #include "autons.hpp"
 #include "config.hpp"
 #include "drivetrain.hpp"
-#include "pto.hpp"
 #include "tuner.hpp"
 #include <algorithm>
 #include <cstdarg>
@@ -195,13 +194,6 @@ static void drawAuton(const char* auton, std::uint32_t elapsed, std::uint32_t no
             bar(elapsed / static_cast<double>(AUTON_MS), 9).c_str());
 }
 
-// NOMESH: in LIFT, but the intake motor isn't turning with the lift, so it isn't helping.
-static const char* ptoLabel(const PtoStatus& p) {
-    if (p.shifting) return "SHIFT";
-    if (p.mode == PtoMode::INTAKE) return "INTAKE";
-    return p.noMesh ? "NOMESH" : "LIFT";
-}
-
 static void drawDriver(std::uint32_t elapsed, double battery, const Health& h, std::uint32_t now) {
     if (elapsed < DRIVER_MS) {
         std::uint32_t left = (DRIVER_MS - elapsed + 999) / 1000;
@@ -222,8 +214,7 @@ static void drawDriver(std::uint32_t elapsed, double battery, const Health& h, s
     if (battery < 25 && !blink(now)) {
         setLine(1, "BAT LOW  %3.0f%%", battery);
     } else {
-        // Where the PTO is takes the battery bar's place.
-        setLine(1, "BAT %3.0f%% %s", battery, ptoLabel(ptoStatus()));
+        setLine(1, "BAT %3.0f%% [%s]", battery, bar(battery / 100, 4).c_str());
     }
 
     const char* alert = blink(now) ? "!!" : "  ";
@@ -342,7 +333,6 @@ static void loop() {
     phaseStart = boot;
     bool warnedHot = false;
     int warnedDead = 0;
-    bool warnedNoMesh = false;
 
     while (true) {
         std::uint32_t now = pros::millis();
@@ -396,11 +386,6 @@ static void loop() {
                 }
                 if (h.deadPort && h.deadPort != warnedDead) rumble("...");
                 warnedDead = h.deadPort;
-
-                // Two long buzzes when the PTO goes NOMESH.
-                bool noMesh = ptoStatus().noMesh;
-                if (noMesh && !warnedNoMesh) rumble("--");
-                warnedNoMesh = noMesh;
 
                 drawDriver(elapsed, battery, h, now);
                 break;

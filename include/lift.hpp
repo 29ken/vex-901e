@@ -115,7 +115,6 @@ struct LiftControl {
     std::uint32_t startTime = 0;
     bool downHeld = false;
     std::uint32_t downSince = 0;
-    bool ptoMove = false;  // the TARGET move running was started by the PTO
     LiftTop top;
 
     double height(double raw) const { return raw - zero; }
@@ -129,7 +128,6 @@ struct LiftControl {
         manualPower = power;
         if (power) {
             mode = MANUAL;
-            ptoMove = false;
         } else if (mode == MANUAL) {
             mode = IDLE;
         }
@@ -151,39 +149,6 @@ struct LiftControl {
         if (zeroed && !backwards && height(raw) > LIFT_BOTTOM) driveTo(0, raw, now);
     }
 
-    // What the driver or an auton is asking the lift to do, for the PTO: +1 up,
-    // -1 down, 0 nothing. A move the PTO started itself doesn't count.
-    int ask() const {
-        switch (mode) {
-            case MANUAL:
-                return manualPower > 0 ? 1 : manualPower < 0 ? -1 : 0;
-            case TARGET:
-                return ptoMove ? 0 : approach;
-            case REZERO:
-                return -1;
-            case IDLE:
-                return 0;
-        }
-        return 0;
-    }
-
-    // The PTO wants the cascade at this height (clamp height, after a switch to
-    // INTAKE). Anything the driver or an auton is doing comes first. It only
-    // starts from a standstill (rpm is the lift motors' speed; unreadable counts
-    // as stopped), so the backwards-sensor check never sees it coast the wrong way.
-    void moveForPto(double height_, double raw, double rpm, std::uint32_t now) {
-        if (mode != IDLE || !zeroed || backwards) return;
-        if (std::isfinite(rpm) && std::fabs(rpm) > LIFT_STALL_RPM) return;
-        driveTo(height_, raw, now);
-        ptoMove = true;
-    }
-
-    // The PTO doesn't want that any more: stop its move, if that's still running.
-    void endPtoMove() {
-        if (ptoMove && mode == TARGET) mode = IDLE;
-        ptoMove = false;
-    }
-
     void downButton(bool held, double raw, std::uint32_t now) {
         if (held && !downHeld) {
             downHeld = true;
@@ -201,8 +166,7 @@ struct LiftControl {
     }
 
     // Returns the power to send. While the robot is disabled the motors ignore
-    // commands, and unless the PTO's gear is on the winch the lift is held still
-    // (enabled is false for both), so a pending move just waits.
+    // commands (enabled is false), so a pending move just waits.
     int update(double raw, double rpm, bool enabled, std::uint32_t now) {
         if (!enabled) {
             top.stalledSince = 0;  // standing still on purpose isn't stalling at the top
@@ -246,7 +210,6 @@ struct LiftControl {
 
   private:
     void driveTo(double height_, double raw, std::uint32_t now) {
-        ptoMove = false;  // moveForPto() sets it again for its own moves
         begin(TARGET, raw, now);
         target = height_;
         approach = target > height(raw) ? 1 : -1;
