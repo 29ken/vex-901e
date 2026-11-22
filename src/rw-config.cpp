@@ -16,7 +16,8 @@ pros::MotorGroup right_chassis({9, 10, 8}, pros::MotorGearset::blue);
 
 pros::Imu inertial_sensor(11);  // TODO: the IMU's real port. RW needs it for every heading
 
-// Tracking wheels
+// Tracking wheels: the V4 robot has none (using_*_tracker below are false), but
+// RW's library needs these names to exist. Nothing reads ports 6 and 7.
 pros::Rotation horizontal_tracker(7);
 pros::Rotation vertical_tracker(6);
 
@@ -45,9 +46,11 @@ double distance_kp = 1.1, distance_ki = 0.1, distance_kd = 7;
 double turn_kp = 0.3, turn_ki = 0, turn_kd = 2.5;
 double heading_correction_kp = 0.6, heading_correction_ki = 0, heading_correction_kd = 4;
 
-// Enable or disable the use of tracking wheels
-bool using_horizontal_tracker = true;   // You have one on port 7
-bool using_vertical_tracker = true;    // You have one on port 6
+// Enable or disable the use of tracking wheels. The V4 robot has none (the odom
+// pods were on the early-season robot), so odometry uses the drive motors'
+// encoders and wheel_distance_in, with the IMU for heading.
+bool using_horizontal_tracker = false;
+bool using_vertical_tracker = false;
 
 // IGNORE THESE IF YOU ARE NOT USING TRACKING WHEELS
 // These comments are in the perspective of a top down view of the robot when the robot is facing vertical
