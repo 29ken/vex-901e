@@ -69,20 +69,22 @@ double vertical_tracker_diameter = 2.125;
 // double front_sensor_offsetY = 6.5;
 // For the X offset, a negative value indicates that the sensor is located on the left side of the robot, while a positive value indicates that it is on the right side.
 
-// From the V4 CAD ("V4 Distance Sensors"), measured to each sensor's face from
-// the middle of the four drive wheels, which is the point RW's odometry tracks
-// with no tracking wheels. Front is the claw end. Heights: front 2.5", left and
-// right 12.2", back 11.0". Every beam is clear of the robot for 30".
+// From the V4 CAD ("V4 Distance Sensors", 2026-11-23), measured to the centre of
+// each sensor's lens window (it sits 0.26" off the sensor's middle) from the
+// middle of the four drive wheels, which is the point RW's odometry tracks with
+// no tracking wheels. Front is the claw end. Lens heights: front 2.19" (under
+// the claw), left and right 4.20", back 8.45" (flipped, port toward the robot's
+// right). Every beam is clear of the robot for 30".
 double front_sensor_offsetX = 0.0;
 double front_sensor_offsetY = 2.91;
 
 double left_sensor_offsetX = -3.96;
-double left_sensor_offsetY = -0.25;
+double left_sensor_offsetY = -0.51;
 
 double right_sensor_offsetX = 3.96;
-double right_sensor_offsetY = -0.25;
+double right_sensor_offsetY = -0.51;
 
-double back_sensor_offsetX = -2.50;
+double back_sensor_offsetX = -2.76;
 double back_sensor_offsetY = -1.91;
 
 // ============================================================================
