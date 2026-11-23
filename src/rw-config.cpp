@@ -130,10 +130,10 @@ double stall_exit_msec = 0;
 double distance_reset_max_angle = 30;
 // Distance resets: skip readings that would move the position more than this (inches, 0 = off).
 // 6-10 helps ignore other robots and game elements in front of the wall
-double distance_reset_max_jump = 0;
+double distance_reset_max_jump = 6;
 // Distance resets: skip readings that hit the wall this close to a corner (inches, 0 = off).
 // For Override, about 18 keeps the corner loaders out of the readings
-double distance_reset_corner_margin = 0;
+double distance_reset_corner_margin = 18;
 
 // MCL (startMcl(), which nothing calls yet): particle count (more = smoother but slower, up to 1000),
 // longest distance reading it trusts (inches), and how far behind the distance sensor readings are (msec).
