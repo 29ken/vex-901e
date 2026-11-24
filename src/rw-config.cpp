@@ -73,8 +73,9 @@ double vertical_tracker_diameter = 2.125;
 // each sensor's lens window (it sits 0.26" off the sensor's middle) from the
 // middle of the four drive wheels, which is the point RW's odometry tracks with
 // no tracking wheels. Front is the claw end. Lens heights: front 2.19" (under
-// the claw), left and right 4.20", back 8.45" (flipped, port toward the robot's
-// right). Every beam is clear of the robot for 30".
+// the claw), left and right 4.20", back 7.95" (flipped, port toward the robot's
+// right; the ratchet/brace joint next to it is reversed to make room). Every
+// beam is clear of the robot for 30".
 double front_sensor_offsetX = 0.0;
 double front_sensor_offsetY = 2.91;
 
