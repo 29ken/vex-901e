@@ -74,11 +74,14 @@ constexpr double HALF_WIDTH = 6.14;  // the drive frame's sides
 // The back corners are 9.8 in from the centre, so with the back on a wall the
 // robot drives this far out before it can turn.
 constexpr double OFF_WALL = 4;
-// Backs away this far after scoring: the front corners are 9.42 in from the
-// centre, so 6.5 in back (12.75 in from the goal's centre) they clear the goal
-// by 0.5 in when turning.
+// Backs away about this far after scoring: the front corners are 9.42 in from
+// the centre, so 6.5 in back (12.75 in from the goal's centre) they clear the
+// goal by 0.5 in when turning. Between a goal and a wall see backOffToTurn().
 constexpr double BACK_OFF = 6.5;
-constexpr double BACK_OFF_VOLTS = 7;  // in the gap beside a goal the robot has 0.6 in to the wall when it turns
+constexpr double BACK_OFF_VOLTS = 7;
+constexpr double FRONT_CORNER = 9.42, BACK_CORNER = 9.8;  // corner distances from the centre (CAD)
+constexpr double GOAL_RADIUS = 2.81;
+constexpr int SETTLE_MS = 100;  // holding still before a turn in a tight spot
 constexpr int CLAW_OPEN_MS = 150;  // time for the piece to drop after opening. TODO: practice
 constexpr int CLAW_CLOSE_MS = 150; // time for the claw to close on a stack. TODO: practice
 
@@ -302,6 +305,15 @@ void grab(Pt piece, const char* name, double nextLift = LIFT_CARRY) {
     std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
+// Stops dead and holds for a moment. Every RW move starts by letting the
+// motors coast, so a robot still rolling from a slow back-out kept going about
+// 1 in into the next turn, enough to clip the goal beside a wall stack.
+void settle() {
+    driveChassis(0, 0);
+    stopChassis(pros::MotorBrake::hold);
+    pros::delay(SETTLE_MS);
+}
+
 // Takes a Cup+Pin stack against a wall (red coordinates), the way the robot in
 // the overhead video does, fitted to V4. V4 (14.8 in long, corners 9.4-9.8 in
 // from its centre) can't turn to face the wall in the gap between the stack and
@@ -364,13 +376,15 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     }
     step(direct ? "to the wall stack (straight in)" : "to the wall stack");
     aimIfNeeded(k, TURN_FIRST);
-    autograbArm(true);
     moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
     step("corner on the wall");
     curveCircle(turned(faceWall), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // squares up, pressing the corner on the wall
     driveChassis(3, 3);  // a gentle push to seat the front on the wall
     pros::delay(150);
     driveChassis(0, 0);
+    // Only now look for the stack: armed earlier, the claw could close during
+    // the curve and drag the stack. So `seen` means it's in the claw now.
+    autograbArm(true);
     bool seen = autograbWait(50);
     clawGrab();
     pros::delay(CLAW_CLOSE_MS);
@@ -400,18 +414,46 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     }
     liftTo(nextLift);  // rises while it backs out and turns
     driveTo(-(GAP_TURN - FRONT), msFor(GAP_TURN - FRONT) + 300, true, GAP_VOLTS);  // slow: an inch too far and it can't turn
+    settle();  // the next move spins here
     step("wall stack");
     std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
 // Puts what the claw holds on a goal (red coordinates), then backs off (to a
 // stop) and lowers the lift.
+// Backs straight away from the goal it just scored on (field coordinates) to
+// where it can turn: front corners clear of that goal, back corners clear of
+// the walls. In the open that's BACK_OFF. Between a goal and the wall there is
+// only ~1 in to spare in all (at 7 V it went 0.9 in too far and its corner hit
+// the wall on the next turn), so there it goes to the middle, slowly, and settles.
+void backOffToTurn(Pt goal) {
+    double h = getInertialHeading() * M_PI / 180;
+    Pt away{-std::sin(h), -std::cos(h)};
+    auto room = [&](double b) {
+        Pt p{x_pos + away.x * b, y_pos + away.y * b};
+        double fromGoal = std::hypot(p.x - goal.x, p.y - goal.y) - FRONT_CORNER - GOAL_RADIUS;
+        double fromWall = std::min(WALL - std::fabs(p.x), WALL - std::fabs(p.y)) - BACK_CORNER;
+        return std::min(fromGoal, fromWall);
+    };
+    double best = BACK_OFF, most = -1e9;
+    for (double b = 4; b <= 10.001; b += 0.05) {
+        if (room(b) > most) { most = room(b); best = b; }
+    }
+    if (most >= 1.5) {  // open field: the usual back-off is enough
+        driveTo(-BACK_OFF, msFor(BACK_OFF), true, BACK_OFF_VOLTS);
+        return;
+    }
+    driveTo(-best, msFor(best) + 300, true, GAP_VOLTS);
+    settle();
+    std::printf("Back off %.2f in: %.2f in to spare when it turns\n", best, most);
+}
+
 void score(Pt goal, double liftHeight, const char* name) {
     liftTo(liftHeight);  // usually already on its way up
     clawTo(at(goal), false, liftHeight, LIFT_NEAR_SCORE);
     clawRelease();
     pros::delay(CLAW_OPEN_MS);
-    driveTo(-BACK_OFF, msFor(BACK_OFF), true, BACK_OFF_VOLTS);  // stops: at full power it went 1.5 in too far
+    backOffToTurn(at(goal));
     liftTo(LIFT_GRAB);
     step("release + back off");
     std::printf("Scored on %s\n", name);
