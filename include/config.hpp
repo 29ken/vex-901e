@@ -26,6 +26,14 @@ inline constexpr std::int8_t LIFT_SENSOR = 4;
 // heights measured on the early-season robot don't carry over.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure
 
+// Lift heights the autons use, in the same units. TODO: every one of these is
+// a placeholder until it's read off the brain screen at practice.
+inline constexpr double LIFT_GRAB = 0;             // picking up from the floor or a wall stack
+inline constexpr double LIFT_CARRY = 120;          // holding something while driving
+inline constexpr double LIFT_ALLIANCE_GOAL = 300;  // claw over a red/blue goal (3.25 in tall)
+inline constexpr double LIFT_NEUTRAL_GOAL = 450;   // claw over a black goal (5.8 in tall)
+inline constexpr double LIFT_PER_PIECE = 250;      // extra for each piece already on that goal
+
 // How close the PID tuner's test moves have to land. Tighter = more exact, but
 // slower to finish.
 inline constexpr float DRIVE_EXACT_IN = 0.25f;

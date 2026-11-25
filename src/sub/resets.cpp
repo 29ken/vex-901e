@@ -89,7 +89,7 @@ bool tryReset(const Mount& m, std::vector<double> readings) {
 
 }  // namespace
 
-int resetFrom(std::initializer_list<ResetSensor> sensors) {
+static int resetWith(const std::vector<ResetSensor>& sensors) {
     std::vector<Mount> mounts;
     for (ResetSensor s : sensors) {
         Mount m = mountOf(s);
@@ -137,6 +137,27 @@ int resetFrom(std::initializer_list<ResetSensor> sensors) {
     return used;
 }
 
+int resetFrom(std::initializer_list<ResetSensor> sensors) {
+    return resetWith(std::vector<ResetSensor>(sensors));
+}
+
 bool resetFrom(ResetSensor sensor) {
-    return resetFrom({sensor}) == 1;
+    return resetWith({sensor}) == 1;
+}
+
+int resetNearWalls() {
+    double heading = getInertialHeading();
+    std::vector<ResetSensor> close;
+    for (ResetSensor s : {ResetSensor::Front, ResetSensor::Back, ResetSensor::Left, ResetSensor::Right}) {
+        Mount m = mountOf(s);
+        double ox = 0, oy = 0;
+        localToGlobal(m.x, m.y, heading * M_PI / 180, ox, oy);
+        double beam = (heading + m.facing) * M_PI / 180;
+        bool hitsXWall = false;
+        double otherGap = 0;
+        double expected = beamToWall(x_pos + ox, y_pos + oy, std::sin(beam), std::cos(beam), field_half_size,
+                                     hitsXWall, otherGap);
+        if (expected < m.maxRange - 1) close.push_back(s);  // 1 in spare for drift
+    }
+    return close.empty() ? 0 : resetWith(close);
 }

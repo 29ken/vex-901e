@@ -56,6 +56,15 @@ bool clawClosed() {
 void autograbArm(bool on) { armed = on; }
 bool autograbArmed() { return armed; }
 
+bool autograbWait(int timeout_ms) {
+    std::uint32_t start = pros::millis();
+    while (armed && pros::millis() - start < static_cast<std::uint32_t>(timeout_ms)) {
+        pros::delay(10);
+    }
+    armed = false;
+    return clawClosed();
+}
+
 bool clawGrabWhenSeen(int timeout_ms) {
     std::uint32_t before = grabs;
     std::uint32_t start = pros::millis();

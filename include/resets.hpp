@@ -17,6 +17,9 @@ enum class ResetSensor { Front, Back, Left, Right };
 bool resetFrom(ResetSensor sensor);
 // How many of them corrected X or Y.
 int resetFrom(std::initializer_list<ResetSensor> sensors);
+// Tries only the sensors that should see a wall within their range from where
+// the robot thinks it is, so it costs no time when no wall is close.
+int resetNearWalls();
 
 // Tuning. Every number here is a starting guess until it's tested on a field.
 
