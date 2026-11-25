@@ -622,6 +622,21 @@ void backAway(double straight, std::vector<Via> then = {}) {
     step("back away");
 }
 
+// For the gap between a goal and the wall, where there's no room for a reverse
+// curve: the slow straight back-off to where the robot can turn, then stopped.
+void gapBack(Pt goal) {
+    backOffToTurn(at(goal));
+    liftTo(LIFT_GRAB);
+    step("back off (gap)");
+}
+
+// Turns on the spot to face a point (red coordinates). Only from a stop.
+void faceTo(Pt p) {
+    turnOnSpotNext = false;
+    aimAt(at(p));
+    step("turn");
+}
+
 // ---- Routes (red) --------------------------------------------------------------
 
 void none() {}
@@ -642,14 +657,25 @@ void redLeft() {
 // the wall stack in front of the black goal onto the black goal; the yellow
 // Cup+Pin by the Midfield onto the red goal. The video's robot took 14.9 s.
 void redLeft4() {
-    startAtToggle({-WALL + BACK, -6}, 90);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
-    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL);
-    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
-    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal");
+    // Red Left 4, fast line: preload -> RG, W1 -> RG, W2 -> BG, YN -> RG (rl4-fast, final)
+    startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});  // one bend off the toggle, into RG from the NNW (~152 deg)
+    backAway(4, {{-51, -8}});  // 4 in straight off the goal, then reverse to just NE of W1's 45-degree line-up (rolling)
+    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, true);  // reverses straight into the forward run: one curve down the 45 line, no stop at the line-up
+    turnToAngle(turned(90), 900);  // spin to face RG (turnToAngle settles faster than face)
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
+    backAway(4, {{-59.5, -23.5}});  // straight off RG, then a short reverse to just short of the gap's turn spot...
+    settle();  // ...hold still (stops ~0.1 in past the aim, 0.3 in from RG / 0.8 in from the wall when turning)
+    turnToAngle(turned(25), 900);  // aim NNE, clear of RG
+    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL, true, {{-52, -3, 0.8}, {-50, 4, 0.6}});  // sweep north, then bend left onto W2's 45 line at 27 in/s
+    turnToAngle(turned(90), 900);
+    scoreOn(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
+    backAway(4, {{-59.5, 23.5}});  // same gap move beside BG
+    settle();
+    turnToAngle(turned(143), 900);  // face straight down the line to YN (passes BG 1.6 in clear)
+    take(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-33.7, -11.66}});  // full speed until ~17 in out, decelerate into the piece, grab rolling
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-25.5, -33.5}, {-31.8, -37.2}, {-37.8, -34.8}});  // roll on round a right-hand loop (lift rising), last 16 in straight into RG from the SE
+
 }
 
 // Ken's order from the route labeler (2026-11-25): preload, the wall stack by
@@ -657,16 +683,24 @@ void redLeft4() {
 // yellow Cup+Pin by the Midfield, then the wall stack by the black goal, onto
 // the black goal.
 void redLeft5() {
-    startAtToggle({-WALL + BACK, -6}, 90);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
+    startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-58.5, -7}, {-54.5, -11}});
+    backAway(4, {{-51.5, -7.5}, {-50.6, -6.8}});
     grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    grab(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE);
-    score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal");
-    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL);
-    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
+    faceTo(RED_GOAL_LEFT);
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
+    gapBack(RED_GOAL_LEFT);
+    faceTo({-52.9, -35.7});
+    take(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-52.9, -35.7}});
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-42, -48}, {-36, -41}, {-37, -35}});
+    backAway(4, {{-29, -34, 0.5}, {-17.3, -37.9, 0.5}, {-14.6, -43.3}});
+    take(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL, {{-17.3, -37.9}});
+    scoreOn({-46.5, 23.8}, LIFT_NEUTRAL_GOAL, "black goal", {{-45, -5}, {-51, 9}});
+    backAway(4, {{-50.5, 8.5, 0.6}, {-49.8, 6.2, 0.4}, {-48.4, 4.8}});
     grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE);
-    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
+    faceTo(BLACK_GOAL_LEFT);
+    scoreOn(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
+
 }
 
 // Bottom Quadrant: toggle, preload and the corner Cup+Pin on the red goal.
@@ -807,13 +841,9 @@ void lab() {
             curve(points(i), rev, stop, TOP_IPS);
             step("curve");
         } else if (c == "gapback" && t.size() >= 2 && labPoint(t[1], target)) {
-            backOffToTurn(at({target.x, target.y}));
-            liftTo(LIFT_GRAB);
-            step("back off (gap)");
+            gapBack({target.x, target.y});
         } else if (c == "face" && t.size() >= 2 && labPoint(t[1], target)) {
-            turnOnSpotNext = false;
-            aimAt(at({target.x, target.y}));
-            step("turn");
+            faceTo({target.x, target.y});
         } else if (c == "turn" && t.size() >= 2) {
             turnToAngle(turned(std::atof(t[1].c_str())), 900);
             step("turn");
