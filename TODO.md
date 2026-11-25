@@ -84,6 +84,23 @@ which line of code each measured number replaces.
       backing off (`BACK_OFF`)?
     - Time each route; the terminal prints each step's time.
 
+## Making the curved autons (Red Left 4/5) match the simulator
+
+In this order at practice:
+1. `Cal dist`, then `Cal turn` (controller menu).
+2. Pick the auton `Cal: feedforward`, with 4 ft clear in front and behind. Copy
+   the three numbers from the brain into `drive_kS`, `drive_kV`, `drive_kA` in
+   `src/rw-config.cpp`. RW's curve follower needs these.
+3. Pick the auton `Cal: drive log`, with 4 ft clear all round (about 15 s).
+   Then on the computer: `sh sim/fit-profile.sh rw_drive_log.csv`, so the
+   simulator drives like our robot, and re-run the route search.
+4. Measure the lift (real heights per goal and stack level, and its speed:
+   `LIFT_*` in config.hpp, `LIFT_DPS` in autonroutes.cpp) and the claw
+   (`CLAW_OPEN_MS`, `CLAW_CLOSE_MS`, `AUTOGRAB_MM`).
+5. Measure where the loose Cup+Pins really sit (the code has them from a video, +-3 in).
+6. Run Red Left 4 with speeds capped low, several times. Same spot but off:
+   shift the points. Scattered: cap the curve's speed.
+
 ## Autons: what's there and what's wrong
 
 Auton time in RW's simulator (not yet fitted to our robot), run with V4's

@@ -104,6 +104,9 @@ constexpr Pt STACK_BY_BLACK_GOAL{-68.7, 23.6};
 constexpr Pt DIAG_NEAR{-23.4, -25.3};  // yellow pin, on the diagonal by the Midfield corner
 constexpr Pt DIAG_FAR{-45.9, -47.6};   // yellow pin, on the diagonal toward the corner
 constexpr Pt MID_EDGE{-22.8, -1.9};    // red/blue pin, middle of the Midfield's left edge
+constexpr Pt MID_BOTTOM{-2.4, -24.2};  // loose Cup+Pin by the Midfield's bottom edge (off the video, +-3 in)
+constexpr Pt BLACK_GOAL_BOTTOM{23.55, -47.09};  // black goal, bottom Quadrant: starts with a yellow pin on it
+constexpr Pt STACK_BY_RED_GOAL_BOTTOM{-23.6, -68.7};
 
 // What the robot drives around: all nine goals, the eight wall stacks and the
 // four loaders, in field coordinates (the same set for red and blue), and how
@@ -666,6 +669,27 @@ void gapBack(Pt goal) {
     step("back off (gap)");
 }
 
+// Flips a second toggle (red coordinates for its place on the wall, as in
+// startAtToggle): a curve through `via` to a point TOGGLE_LINEUP in front of
+// it, turns its back to the wall, backs in slowly, flips, and rolls off the
+// wall (a toggle only counts once no robot touches it, and for the Autonomous
+// Win Point the robot must not end touching the wall).
+constexpr double TOGGLE_LINEUP = 10;
+void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}) {
+    double h = heading * M_PI / 180;
+    Pt front{centre.x + std::sin(h) * TOGGLE_LINEUP, centre.y + std::cos(h) * TOGGLE_LINEUP};
+    via.push_back({front.x, front.y, 0.5});
+    curve(via, false, true, TOP_IPS);
+    turnToAngle(turned(heading), 900);
+    step("to the toggle");
+    Pt wall = at({centre.x - std::sin(h) * 0.5, centre.y - std::cos(h) * 0.5});
+    moveToPoint(wall.x, wall.y, -1, msFor(TOGGLE_LINEUP), true, 7);
+    setToggle(blue);
+    step("toggle");
+    driveTo(OFF_WALL, msFor(OFF_WALL));
+    step("off the wall");
+}
+
 // Turns on the spot to face a point (red coordinates). Only from a stop.
 void faceTo(Pt p) {
     turnOnSpotNext = false;
@@ -771,6 +795,16 @@ void skills() {
     step("off the wall");
 }
 
+// Practice set-up, picked like an auton. Both need about 4 ft of clear floor
+// in front of and behind the robot (the drive log: on every side).
+// Measures the drive's feedforward for RW's curve follower: copy the three
+// numbers it shows on the brain into drive_kS, drive_kV and drive_kA in
+// src/rw-config.cpp. It never returns: stop the program when it's done.
+void calFeedforward() { measureDriveFeedforward(); }
+// Records about 15 s of driving for the simulator's fitter (sim/fit-profile.sh):
+// saves rw_drive_log.csv to the SD card, or prints it to the terminal without one.
+void calDriveLog() { calibrateDrive(); }
+
 template <void (*Route)()>
 void asBlue() {
     blue = true;
@@ -793,14 +827,15 @@ void asBlue() {
 //   gapback GOAL                        backOffToTurn: the slow back-off for between a goal and a wall
 //   face PT / turn HEADING              turn on the spot
 //   oldscore GOAL LIFT / oldtake PIECE LIFT   the stop-and-go helpers
+//   toggle X Y HEADING [PT ...]         flipToggleAt: a second toggle (bottom: toggle -6 -62.61 0)
 //   wait MS / lift LIFT / settle
 // PT is x,y or x,y,speed. GOAL: RG RGB BG or x,y. PIECE: YF YN ME or x,y.
 // STACK: W1 W2. LIFT: GRAB CARRY A0 A1 A2 N0 N1 or a number.
 bool labPoint(const std::string& t, Via& v) {
     static const std::map<std::string, Pt> named = {
         {"RG", RED_GOAL_LEFT}, {"RGB", RED_GOAL_BOTTOM}, {"BG", BLACK_GOAL_LEFT},
-        {"YF", DIAG_FAR}, {"YN", DIAG_NEAR}, {"ME", MID_EDGE},
-        {"W1", STACK_BY_RED_GOAL}, {"W2", STACK_BY_BLACK_GOAL}};
+        {"YF", DIAG_FAR}, {"YN", DIAG_NEAR}, {"ME", MID_EDGE}, {"M2", MID_BOTTOM}, {"BK2", BLACK_GOAL_BOTTOM},
+        {"W1", STACK_BY_RED_GOAL}, {"W2", STACK_BY_BLACK_GOAL}, {"W3", STACK_BY_RED_GOAL_BOTTOM}};
     auto it = named.find(t);
     if (it != named.end()) {
         v = {it->second.x, it->second.y, 1};
@@ -824,7 +859,8 @@ double labLift(const std::string& t) {
 
 const char* labName(const std::string& t) {
     static std::map<std::string, std::string> names = {
-        {"RG", "alliance goal"}, {"RGB", "alliance goal"}, {"BG", "black goal"},
+        {"RG", "alliance goal"}, {"RGB", "bottom alliance goal"}, {"BG", "black goal"}, {"BK2", "bottom black goal"},
+        {"M2", "Cup+Pin at the Midfield's bottom edge"}, {"W3", "wall stack by the bottom alliance goal"},
         {"YF", "yellow Cup+Pin by the corner"}, {"YN", "yellow Cup+Pin by the Midfield"}, {"ME", "Cup+Pin at the Midfield's edge"},
         {"W1", "wall stack by the alliance goal"}, {"W2", "wall stack by the black goal"}};
     auto it = names.find(t);
@@ -890,6 +926,8 @@ void lab() {
             pros::delay(std::atoi(t[1].c_str()));
         } else if (c == "lift" && t.size() >= 2) {
             liftTo(labLift(t[1]));
+        } else if (c == "toggle" && t.size() >= 4) {
+            flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(4));
         } else if (c == "settle") {
             settle();
         } else {
@@ -918,6 +956,11 @@ const Auton autons[] = {
     {"Blue Left 5", asBlue<redLeft5>},
     {"Blue Right 2", asBlue<redRight>},
     {"Skills", skills},
+#ifndef RW_SIM_PROS
+    // Practice set-up runs, not match autons (the simulator's list has no room for them).
+    {"Cal: feedforward", calFeedforward},
+    {"Cal: drive log", calDriveLog},
+#endif
 };
 const int autonCount = sizeof(autons) / sizeof(autons[0]);
 int selectedAuton = 0;
