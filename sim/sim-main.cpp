@@ -60,6 +60,8 @@ struct Options {
   std::string output;
   rwsim::WorldSetup world;
   double robot_size = 15;
+  double frame_front = 0, frame_back = 0, frame_half = 0;
+  bool wall_stick = false;
   bool list = false;
 };
 
@@ -72,6 +74,8 @@ void usage() {
     "  --ideal                No wheel slip, IMU error, or sensor noise\n"
     "  --walls                Empty field (no Override goals, loaders, or stacks)\n"
     "  --size INCHES          Robot size for wall collisions (default 15)\n"
+    "  --frame F,B,W          Frame as a rectangle for wall collisions instead: front, back, half width\n"
+    "  --wall slide|stick     With --frame: a corner on a wall slides along it (default) or stays put\n"
     "  --seed N               Random seed for slip and noise\n"
     "  --profile FILE         Robot profile from fit-profile (default sim/robot-profile.txt if it exists)\n"
     "  --no-profile           Ignore the robot profile and use the default robot\n"
@@ -96,6 +100,13 @@ Options parse(int argc, char** argv) {
     else if (arg == "--ideal") opt.world.realistic = false;
     else if (arg == "--walls") opt.world.override_field = false;
     else if (arg == "--size") opt.robot_size = std::atof(next("--size"));
+    else if (arg == "--wall") opt.wall_stick = !std::strcmp(next("--wall"), "stick");
+    else if (arg == "--frame") {
+      if (std::sscanf(next("--frame"), "%lf,%lf,%lf", &opt.frame_front, &opt.frame_back, &opt.frame_half) != 3) {
+        std::fprintf(stderr, "--frame wants front,back,half width\n");
+        std::exit(2);
+      }
+    }
     else if (arg == "--seed") opt.world.seed = (unsigned)std::atoi(next("--seed"));
     else if (arg == "--out") opt.output = next("--out");
     else if (arg == "--profile") opt.profile = next("--profile");
@@ -127,6 +138,10 @@ int main(int argc, char** argv) {
   robot.track_width_in = distance_between_wheels;
   robot.inches_per_motor_rev = wheel_distance_in;
   robot.robot_size_in = opt.robot_size;
+  robot.frame_front_in = opt.frame_front;
+  robot.frame_back_in = opt.frame_back;
+  robot.frame_half_width_in = opt.frame_half;
+  robot.wall_stick = opt.wall_stick;
   if (using_horizontal_tracker) {
     robot.horizontal_tracker_port = horizontal_tracker.index();
     robot.horizontal_offset_in = horizontal_tracker_dist_from_center;

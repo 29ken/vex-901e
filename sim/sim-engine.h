@@ -19,6 +19,9 @@ namespace rwsim {
     double track_width_in = 12;
     double inches_per_motor_rev = 7;
     double robot_size_in = 15;
+    // The frame as a rectangle for wall collisions (inches from the centre); 0 = the square robot_size_in.
+    double frame_front_in = 0, frame_back_in = 0, frame_half_width_in = 0;
+    bool wall_stick = false;  // with a frame: a corner pressed on a wall stays put (high friction) instead of sliding
     int32_t horizontal_tracker_port = -1, vertical_tracker_port = -1;
     double horizontal_offset_in = 0, vertical_offset_in = 0; // + = behind center / + = right of center
     double horizontal_diameter_in = 2, vertical_diameter_in = 2;

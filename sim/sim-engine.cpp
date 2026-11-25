@@ -234,10 +234,62 @@ void physicsStep(double dt) {
   double dx = (v * std::sin(avg) + lateral * std::cos(avg)) * dt;
   double dy = (v * std::cos(avg) - lateral * std::sin(avg)) * dt;
 
-  // Walls: the robot stops at the perimeter but its wheels keep spinning (encoders keep counting)
-  double limit = world.field_half_in - robot.robot_size_in / 2.0;
-  double new_x = std::max(-limit, std::min(limit, true_x + dx));
-  double new_y = std::max(-limit, std::min(limit, true_y + dy));
+  // Walls: the robot stops at the perimeter but its wheels keep spinning (encoders keep counting).
+  // With --frame, the frame's corners at the current heading meet the wall; otherwise a square.
+  // The heading doesn't feel the wall, so a corner touching the wall doesn't twist the robot the
+  // way a real wall would. With --frame, a wall the robot meets at an angle pushes it sideways
+  // along its own left-right axis (omni rollers roll that way; the driven wheels hold it
+  // fore-aft), the way an all-omni robot slides along a wall; meeting a wall square, it just stops.
+  double lo_x, hi_x, lo_y, hi_y;
+  if (robot.frame_front_in > 0) {
+    double h = true_heading + w * dt, ext[4] = {0, 0, 0, 0};  // -x, +x, -y, +y
+    for (double lx : {-robot.frame_half_width_in, robot.frame_half_width_in}) {
+      for (double ly : {-robot.frame_back_in, robot.frame_front_in}) {
+        double cx = lx * std::cos(h) + ly * std::sin(h), cy = -lx * std::sin(h) + ly * std::cos(h);
+        ext[0] = std::max(ext[0], -cx); ext[1] = std::max(ext[1], cx);
+        ext[2] = std::max(ext[2], -cy); ext[3] = std::max(ext[3], cy);
+      }
+    }
+    lo_x = -world.field_half_in + ext[0]; hi_x = world.field_half_in - ext[1];
+    lo_y = -world.field_half_in + ext[2]; hi_y = world.field_half_in - ext[3];
+  } else {
+    double limit = world.field_half_in - robot.robot_size_in / 2.0;
+    lo_x = lo_y = -limit; hi_x = hi_y = limit;
+  }
+  double new_x = true_x + dx, new_y = true_y + dy;
+  if (robot.frame_front_in > 0 && robot.wall_stick) {
+    // High-friction walls: a corner already touching a wall keeps its place along it, and the
+    // robot turns about that corner (sliding on its omni rollers) instead of sliding along the wall.
+    double h0 = true_heading, h1 = true_heading + w * dt;
+    for (double lx : {-robot.frame_half_width_in, robot.frame_half_width_in}) {
+      for (double ly : {-robot.frame_back_in, robot.frame_front_in}) {
+        double ox = true_x + lx * std::cos(h0) + ly * std::sin(h0), oy = true_y - lx * std::sin(h0) + ly * std::cos(h0);
+        double cx = lx * std::cos(h1) + ly * std::sin(h1), cy = -lx * std::sin(h1) + ly * std::cos(h1);
+        double nx = new_x + cx, ny = new_y + cy, F = world.field_half_in;
+        bool touching_x = std::fabs(std::fabs(ox) - F) < 0.05, touching_y = std::fabs(std::fabs(oy) - F) < 0.05;
+        if (std::fabs(nx) > F && touching_x) { new_x = std::copysign(F, nx) - cx; new_y = oy - cy; }
+        else if (std::fabs(ny) > F && touching_y) { new_y = std::copysign(F, ny) - cy; new_x = ox - cx; }
+      }
+    }
+  }
+  if (robot.frame_front_in > 0) {
+    double h = true_heading + w * dt;
+    double side_x = std::cos(h), side_y = -std::sin(h);  // the robot's right, in field coordinates
+    double over_x = new_x < lo_x ? new_x - lo_x : (new_x > hi_x ? new_x - hi_x : 0);
+    if (over_x != 0 && std::fabs(side_x) > 0.25) {
+      double s = -over_x / side_x;
+      new_x += s * side_x;
+      new_y += s * side_y;
+    }
+    double over_y = new_y < lo_y ? new_y - lo_y : (new_y > hi_y ? new_y - hi_y : 0);
+    if (over_y != 0 && std::fabs(side_y) > 0.25) {
+      double s = -over_y / side_y;
+      new_x += s * side_x;
+      new_y += s * side_y;
+    }
+  }
+  new_x = std::max(lo_x, std::min(hi_x, new_x));
+  new_y = std::max(lo_y, std::min(hi_y, new_y));
   dx = new_x - true_x;
   dy = new_y - true_y;
   true_x = new_x;

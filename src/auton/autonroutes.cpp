@@ -35,6 +35,9 @@
 //   sh sim/run-sim.sh "Blue Left 3"  --start 62.61,6,270     (Blue Left 4/5 the same)
 //   sh sim/run-sim.sh "Blue Right 2" --start 6,62.61,180
 //   sh sim/run-sim.sh "Skills"     --start -62.61,-6,90 --time 60
+// Add `--frame 7.14,7.64,6.14` so the wall meets V4's real frame, and
+// `--wall stick` or `--wall slide` (default) for a wall that grips a corner
+// or lets it slide: the wall stacks in Red Left 4/5 depend on which.
 
 #include "autons.hpp"
 #include "drivetrain.hpp"
@@ -71,10 +74,11 @@ constexpr double HALF_WIDTH = 6.14;  // the drive frame's sides
 // The back corners are 9.8 in from the centre, so with the back on a wall the
 // robot drives this far out before it can turn.
 constexpr double OFF_WALL = 4;
-constexpr double LINEUP = 8;       // the last bit into a goal or piece goes straight and slow
-// Backs away this far after scoring. The front corners are 9.42 in from the
-// centre: at 6 in back they'd clear the goal by 0.02 in when turning, at 8 by 2.
-constexpr double BACK_OFF = 8;
+// Backs away this far after scoring: the front corners are 9.42 in from the
+// centre, so 6.5 in back (12.75 in from the goal's centre) they clear the goal
+// by 0.5 in when turning.
+constexpr double BACK_OFF = 6.5;
+constexpr double BACK_OFF_VOLTS = 7;  // in the gap beside a goal the robot has 0.6 in to the wall when it turns
 constexpr int CLAW_OPEN_MS = 150;  // time for the piece to drop after opening. TODO: practice
 constexpr int CLAW_CLOSE_MS = 150; // time for the claw to close on a stack. TODO: practice
 
@@ -151,17 +155,36 @@ void driveToField(Pt p, double volts = 12) {
     moveToPoint(p.x, p.y, 1, msFor(distanceTo(p)), true, volts);
 }
 
+// ---- How the robot moves ------------------------------------------------------
+// Moves are chained where it's safe: RW's exit=false ends a move without
+// stopping, so the next one keeps the speed and the path curves from one into
+// the next. A chained move leaves the motors running, so the next thing after
+// one must always be another move, never a wait or a sensor reset; every helper
+// below keeps to that, and every route ends with a stop (runAuton()).
+// Every number here is a starting guess until practice.
+constexpr double TURN_FIRST = 60;  // turn on the spot first only past this many degrees; under it the drive curves while moving
+constexpr double FINAL_RUN = 6;    // the last stretch into a goal or piece, straight
+constexpr double FINAL_VOLTS = 9;
+constexpr double DRIVE_IPS = 35;   // rough average speed, to guess whether the lift will be up in time. TODO: practice
+constexpr double LIFT_DPS = 400;   // rough lift speed with a load, sensor degrees per second. TODO: practice
+// Close enough to drive in: the lift finishes the last bit on the way. Scoring
+// only needs the piece above the goal; grabbing needs the claw right down.
+constexpr double LIFT_NEAR_SCORE = 40;  // sensor degrees. TODO: practice
+constexpr double LIFT_NEAR_GRAB = 10;
+
 // With the robot's back against the wall at a toggle and holding the preload:
-// sets the pose (red coordinates), grips the preload, flips the toggle, and
-// drives off the wall (the toggle only counts once no robot touches it).
-void startAtToggle(Pt centre, double heading) {
+// sets the pose (red coordinates), grips the preload, flips the toggle, starts
+// the lift up for the first goal, and rolls off the wall into the next move
+// (the toggle only counts once no robot touches it).
+void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_GOAL) {
     Pt f = at(centre);
     setPose(f.x, f.y, turned(heading));
     stepStart = pros::millis();
     clawGrab();  // the preload goes in the open claw before the match
     setToggle(blue);
     step("toggle");
-    driveTo(OFF_WALL, msFor(OFF_WALL));
+    liftTo(firstLift);  // not during the flip: the ratchet motor drives both the winch and the flapper
+    driveTo(OFF_WALL, msFor(OFF_WALL), false);
     step("off the wall");
 }
 
@@ -175,6 +198,17 @@ void aimIfNeeded(Pt t, double maxOff) {
 
 // If the straight line from the robot to `to` (field coordinates) passes too
 // close to anything in KEEPOUTS, gives a point beside it to drive through first.
+// A point to pass beside something is only good if the robot can turn there:
+// its corners reach 9.8 in, so 10.3 in from the walls, and clear of everything else.
+bool roomToTurn(Pt p, const Keepout* besides) {
+    if (WALL - std::fabs(p.x) < 10.3 || WALL - std::fabs(p.y) < 10.3) return false;
+    for (const Keepout& k : KEEPOUTS) {
+        double size = k.clear - HALF_WIDTH - 1.5;  // the thing's own radius
+        if (&k != besides && std::hypot(p.x - k.c.x, p.y - k.c.y) < 9.8 + size + 0.5) return false;
+    }
+    return true;
+}
+
 bool detour(Pt to, Pt& via) {
     double dx = to.x - x_pos, dy = to.y - y_pos, len2 = dx * dx + dy * dy;
     if (len2 < 1) return false;
@@ -188,130 +222,178 @@ bool detour(Pt to, Pt& via) {
         double ux = d > 0.01 ? (p.x - k.c.x) / d : -dy / std::sqrt(len2);
         double uy = d > 0.01 ? (p.y - k.c.y) / d : dx / std::sqrt(len2);
         via = {k.c.x + ux * (k.clear + 1), k.c.y + uy * (k.clear + 1)};
+        Pt other{k.c.x - ux * (k.clear + 1), k.c.y - uy * (k.clear + 1)};
+        if (!roomToTurn(via, &k) && roomToTurn(other, &k)) via = other;  // e.g. not between a goal and the wall
         worst = k.clear - d;
     }
     return worst > 0;
 }
 
-// Drives so the claw ends on `t` (field coordinates): around any goal in the
-// way, fast to LINEUP short, a distance reset if a wall is close, then straight
-// and slow the rest.
-void clawTo(Pt t, double slowVolts, bool armAutograb, bool waitForLift) {
+// Rolls through the points beside anything in the way of `to` (chained).
+void aroundObstacles(Pt to) {
     Pt via;
-    for (int i = 0; i < 2 && detour(clawStop(t, LINEUP), via); i++) {
-        aimIfNeeded(via, 30);
-        moveToPoint(via.x, via.y, 1, msFor(distanceTo(via)), false);  // keeps rolling into the next move
-        step("around a goal");
-    }
-    aimIfNeeded(t, 30);
-    if (distanceTo(t) > REACH + LINEUP + 2) {
-        driveToField(clawStop(t, LINEUP));
-        step("drive");
-    }
-    if (resetNearWalls() > 0) step("reset");
-    if (waitForLift) {
-        liftWait(1500);  // the piece has to be above the goal before the claw gets there
-        step("lift");
-    }
-    aimIfNeeded(t, 2);  // the slow part goes dead straight
-    if (armAutograb) autograbArm(true);  // closes as soon as the sensor sees it
-    driveToField(clawStop(t), slowVolts);
-    step("in");
-}
-
-// Picks up a free-standing pin or cup (red coordinates).
-void grab(Pt piece, const char* name) {
-    clawRelease();
-    liftTo(LIFT_GRAB);  // already down after score(), unless something stopped it
-    clawTo(at(piece), 6, true, false);
-    bool seen = autograbWait(150);
-    clawGrab();  // close anyway: a cup's clear half can hide it from the sensor
-    liftTo(LIFT_CARRY);
-    std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
-}
-
-// Drives to a point (field coordinates), around anything in the way.
-void travelTo(Pt f) {
-    Pt via;
-    for (int i = 0; i < 2 && detour(f, via); i++) {
-        aimIfNeeded(via, 30);
+    for (int i = 0; i < 3 && detour(to, via); i++) {
+        Pt first;
+        if (detour(via, first)) via = first;  // a point on the far side: the way there goes around too
+        aimIfNeeded(via, TURN_FIRST);
         moveToPoint(via.x, via.y, 1, msFor(distanceTo(via)), false);
         step("around a goal");
     }
-    aimIfNeeded(f, 30);
-    driveToField(f);
 }
 
-// With the front flat on a wall the robot's distance from it is exact: sets
-// that coordinate, if the robot really is square (red coordinates for the wall).
-void wallContactReset(double faceWall) {
-    double heading = getInertialHeading();
-    if (std::fabs(std::remainder(heading - turned(faceWall), 360.0)) > 4) {
-        std::printf("Wall contact: not square (heading %.1f), no reset\n", heading);
-        return;
+// How far the lift still has to go to be within `near` of `target` (0 without its sensor).
+double liftLeft(double target, double near) {
+    LiftStatus s = liftStatus();
+    if (!s.sensorOk || !s.zeroed) return 0;
+    return std::max(0.0, std::fabs(target - s.height) - near);
+}
+
+// Waits until the lift is within `near` of `target`, or has stopped, or timeout_ms.
+void waitLiftNear(double target, double near, int timeout_ms) {
+    std::uint32_t start = pros::millis();
+    while (liftLeft(target, near) > 0 && liftMoving() && pros::millis() - start < static_cast<std::uint32_t>(timeout_ms)) {
+        pros::delay(10);
     }
-    Pt red = at({x_pos, y_pos});  // at() is its own inverse
-    double before = 0, after = WALL - FRONT;
-    if (faceWall == 270) { before = red.x; red.x = -after; after = red.x; }
-    else if (faceWall == 90) { before = red.x; red.x = after; }
-    else if (faceWall == 180) { before = red.y; red.y = -after; after = red.y; }
-    else { before = red.y; red.y = after; }
-    Pt f = at(red);
-    setPose(f.x, f.y, heading);
-    std::printf("Wall contact: %.2f -> %.2f\n", before, after);
+}
+
+// Drives so the claw ends on `t` (field coordinates): around anything in the
+// way, then at full speed to FINAL_RUN short and on into the last stretch
+// without stopping, when the lift will be at `liftTarget` by then. If it won't,
+// it stops there instead, tries a distance reset, waits for the lift and goes on.
+void clawTo(Pt t, bool armAutograb, double liftTarget, double liftNear) {
+    aroundObstacles(clawStop(t, FINAL_RUN));
+    aimIfNeeded(t, TURN_FIRST);
+    double d = distanceTo(t) - REACH - FINAL_RUN;
+    // The piece only meets the goal 1.5 in into the last stretch (piece and goal radii).
+    bool flowing = liftLeft(liftTarget, liftNear) / LIFT_DPS <= (std::max(d, 0.0) + 1.5) / DRIVE_IPS;
+    if (d > 2) {
+        Pt lineup = clawStop(t, FINAL_RUN);
+        moveToPoint(lineup.x, lineup.y, 1, msFor(d), !flowing);
+        step(flowing ? "drive" : "drive, then wait for the lift");
+    }
+    if (!flowing) {
+        if (resetNearWalls() > 0) step("reset");
+        waitLiftNear(liftTarget, liftNear, 1500);
+        step("lift");
+        aimIfNeeded(t, 3);
+    }
+    if (armAutograb) autograbArm(true);  // closes as soon as the sensor sees it
+    Pt stop = clawStop(t);
+    moveToPoint(stop.x, stop.y, 1, msFor(FINAL_RUN + 2), true, FINAL_VOLTS);
+    step("in");
+}
+
+// Picks up a free-standing Cup+Pin (red coordinates) and starts the lift up
+// to `nextLift`, the height of the goal it goes to next.
+void grab(Pt piece, const char* name, double nextLift = LIFT_CARRY) {
+    clawRelease();
+    liftTo(LIFT_GRAB);
+    clawTo(at(piece), true, LIFT_GRAB, LIFT_NEAR_GRAB);  // the lift has to be down before the claw gets there
+    bool seen = autograbWait(80);
+    clawGrab();  // close anyway: a cup's clear half can hide it from the sensor
+    pros::delay(CLAW_CLOSE_MS);
+    liftTo(nextLift);  // rises on the way to the goal
+    std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
 // Takes a Cup+Pin stack against a wall (red coordinates), the way the robot in
-// the overhead video does: from WALL_ENTRY out and along the wall on the side
-// `fromSide` (+1 or -1 along the wall), it drives in at 45 degrees until a
-// front corner meets the wall, turns square against the wall (the corner
-// slides; with all-omni wheels the robot slides sideways easily), pushes
-// gently, grabs, sets its distance from the wall from the contact, and backs
-// out the same way. faceWall: the heading that faces the wall (270 left wall,
-// 180 bottom wall). Touching the wall and brushing the goal beside the stack
-// are both allowed; only the opponent's alliance goals are off limits.
-// Where the robot lines up: this far out from the wall and along it. The 45 degree
-// line in is never closer than 10.9 in to the goal beside the stack, so the robot
-// can only turn on the spot (corners 9.8 in out) far enough along it: at 12.8 it
-// clears the goal by 0.5 in, and the straight run in passes it with 1.9 to spare.
-constexpr double WALL_ENTRY = 12.8;
-constexpr double WALL_AIM_SHIFT = 0;  // along the wall, if the stack ends off-centre in the claw. TODO: practice
-void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name) {
+// the overhead video does, fitted to V4. V4 (14.8 in long, corners 9.4-9.8 in
+// from its centre) can't turn to face the wall in the gap between the stack and
+// the goal in front of it: turning on the spot there it hits the goal or the
+// stack, so it can't come in square the way 10B's robot does.
+//  1. It drives in at 45 degrees from the side `fromSide` (+1 or -1 along the
+//     wall) until the front corner on that side touches the wall.
+//  2. It turns square while pressing that corner on the wall: a curve whose
+//     centre is a little past the corner (WALL_TURN_RADIUS, half the frame
+//     width is 6.14), so the corner pushes into the wall and friction holds
+//     it while the robot slides sideways on its omni rollers. If the corner
+//     stays put, the stack moves into the claw's opening (checked: 0.67 in
+//     from the arms, and still inside if the corner slides 1 in along the
+//     wall). How far it really slides depends on the wall's grip, which only
+//     the field can show: WALL_AIM_SHIFT corrects a slide that repeats.
+//  3. A gentle push seats the front on the wall and the claw grabs. Holding
+//     the stack, whose place on the field is known, the robot knows where it
+//     is: its distance from the wall and its place along it.
+//  4. It backs out to GAP_TURN from the wall, where it can spin to the goal
+//     behind it: 0.37 in from the goal and 0.39 from the wall. That's the
+//     tightest part of the route; brushing our own goal or the wall is allowed.
+// faceWall: the heading that faces the wall (270 left wall, 180 bottom wall).
+// The 45 degree run-in passes the goal 5.6 in clear, and the turn about the corner 1.9 in.
+constexpr double STACK_FROM_WALL = 1.55;  // a stack's centre from the wall's face (RW's field model)
+constexpr double WALL_LINEUP = 12;        // how far back along the 45 degree line it lines up
+constexpr double GAP_TURN = 10.1;         // centre from the wall when spinning to leave: corners 9.8 + 0.3
+constexpr double GAP_VOLTS = 5;           // backing out to GAP_TURN: at 8 V it went an inch too far
+constexpr double WALL_PAST = 1;           // aims this far past the contact point: moveToPoint stops about 1 in early
+constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: practice
+constexpr double WALL_AIM_SHIFT = 0;      // along the wall, toward the side it comes from, if the stack ends off-centre in the claw. TODO: practice
+void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY) {
     double a = faceWall * M_PI / 180;
     Pt toWall{std::sin(a), std::cos(a)};
-    Pt along{fromSide * std::cos(a), -fromSide * std::sin(a)};
-    Pt final{stack.x - toWall.x * REACH - along.x * WALL_AIM_SHIFT, stack.y - toWall.y * REACH - along.y * WALL_AIM_SHIFT};
-    Pt entry{final.x - toWall.x * WALL_ENTRY + along.x * WALL_ENTRY, final.y - toWall.y * WALL_ENTRY + along.y * WALL_ENTRY};
+    Pt along{fromSide * std::cos(a), -fromSide * std::sin(a)};  // toward the side it comes from
+    // Square on the wall: front flat on it, the stack in the claw.
+    double back = FRONT - STACK_FROM_WALL;
+    Pt square{stack.x - toWall.x * back - along.x * WALL_AIM_SHIFT, stack.y - toWall.y * back - along.y * WALL_AIM_SHIFT};
+    // The front corner on the come-from side, on the wall: what it turns about.
+    Pt pivot{square.x + toWall.x * FRONT + along.x * HALF_WIDTH, square.y + toWall.y * FRONT + along.y * HALF_WIDTH};
+    // The square pose turned 45 degrees back about that corner: where the corner first touches.
+    double contactHeading = faceWall - fromSide * 45;
+    Pt v{square.x - pivot.x, square.y - pivot.y};
+    double r = -fromSide * 45 * M_PI / 180;  // compass turn, clockwise positive
+    Pt contact{pivot.x + v.x * std::cos(r) + v.y * std::sin(r), pivot.y - v.x * std::sin(r) + v.y * std::cos(r)};
+    double c = contactHeading * M_PI / 180;
+    Pt lineup{contact.x - std::sin(c) * WALL_LINEUP, contact.y - std::cos(c) * WALL_LINEUP};
+    Pt past{contact.x + std::sin(c) * WALL_PAST, contact.y + std::cos(c) * WALL_PAST};
+
     clawRelease();
     liftTo(LIFT_GRAB);
-    travelTo(at(entry));
-    step("to the wall stack");
-    aimAt(at(final));
+    Pt l = at(lineup), k = at(contact), kp = at(past);
+    // Straight to the contact pose when already on the 45 degree line, else through the line-up point.
+    double bearing = std::atan2(k.x - x_pos, k.y - y_pos) * 180 / M_PI;
+    bool direct = std::fabs(std::remainder(bearing - turned(contactHeading), 360.0)) <= 6 && distanceTo(k) <= WALL_LINEUP + 8;
+    if (!direct) {
+        aroundObstacles(l);
+        aimIfNeeded(l, TURN_FIRST);
+        moveToPoint(l.x, l.y, 1, msFor(distanceTo(l)), true);  // stops on the 45 degree line
+        turnToAngle(turned(contactHeading), 700);  // and faces along it: the corner has to meet the wall where planned
+    }
+    step(direct ? "to the wall stack (straight in)" : "to the wall stack");
+    aimIfNeeded(k, TURN_FIRST);
     autograbArm(true);
-    driveToField(at(final), 8);   // meets the wall at 45 degrees, a front corner first
-    turnToAngle(turned(faceWall), 700);  // squares up, sliding along the wall
-    driveChassis(3, 3);           // a gentle push to seat both front corners on the wall
-    pros::delay(300);
+    moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
+    step("corner on the wall");
+    curveCircle(turned(faceWall), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // squares up, pressing the corner on the wall
+    driveChassis(3, 3);  // a gentle push to seat the front on the wall
+    pros::delay(150);
     driveChassis(0, 0);
-    bool seen = autograbWait(100);
+    bool seen = autograbWait(50);
     clawGrab();
     pros::delay(CLAW_CLOSE_MS);
     step("grabbed at the wall");
-    wallContactReset(faceWall);
-    liftTo(LIFT_CARRY);
-    Pt out = at(entry);
-    moveToPoint(out.x, out.y, -1, msFor(WALL_ENTRY * 1.5), true, 8);  // back out the way it came
+    // Square on the wall and holding the stack: the robot is `back` behind the
+    // stack, and the stack's place on the field is known.
+    double heading = getInertialHeading();
+    if (std::fabs(std::remainder(heading - turned(faceWall), 360.0)) <= 4) {
+        Pt now{stack.x - toWall.x * back, stack.y - toWall.y * back};
+        Pt before = at({x_pos, y_pos}), f = at(now);
+        setPose(f.x, f.y, heading);
+        std::printf("Wall contact: (%.2f, %.2f) -> (%.2f, %.2f)\n", before.x, before.y, now.x, now.y);
+    } else {
+        std::printf("Wall contact: not square (heading %.1f), no reset\n", heading);
+    }
+    liftTo(nextLift);  // rises while it backs out and turns
+    driveTo(-(GAP_TURN - FRONT), msFor(GAP_TURN - FRONT) + 300, true, GAP_VOLTS);  // slow: an inch too far and it can't turn
     step("wall stack");
     std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
-// Puts what the claw holds on a goal (red coordinates), backs off, lowers the lift.
+// Puts what the claw holds on a goal (red coordinates), then backs off (to a
+// stop) and lowers the lift.
 void score(Pt goal, double liftHeight, const char* name) {
-    liftTo(liftHeight);  // rises while the robot drives
-    clawTo(at(goal), 7, false, true);
+    liftTo(liftHeight);  // usually already on its way up
+    clawTo(at(goal), false, liftHeight, LIFT_NEAR_SCORE);
     clawRelease();
     pros::delay(CLAW_OPEN_MS);
-    driveTo(-BACK_OFF, msFor(BACK_OFF));
+    driveTo(-BACK_OFF, msFor(BACK_OFF), true, BACK_OFF_VOLTS);  // stops: at full power it went 1.5 in too far
     liftTo(LIFT_GRAB);
     step("release + back off");
     std::printf("Scored on %s\n", name);
@@ -321,13 +403,14 @@ void score(Pt goal, double liftHeight, const char* name) {
 
 void none() {}
 
-// Left Quadrant: toggle, preload and one more on the red goal, one on the black goal.
+// Left Quadrant: toggle, preload and the corner Cup+Pin on the red goal, the
+// Midfield Cup+Pin on the black goal.
 void redLeft() {
     startAtToggle({-WALL + BACK, -6}, 90);  // flapper arms (+-5.5 in) both on the 25.8 in toggle
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
-    grab(DIAG_FAR, "diagonal piece by the corner");
+    grab(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    grab(DIAG_NEAR, "diagonal piece by the Midfield");
+    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL);
     score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
 }
 
@@ -338,38 +421,36 @@ void redLeft() {
 void redLeft4() {
     startAtToggle({-WALL + BACK, -6}, 90);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
-    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal");
+    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal");
+    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL);
     score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
-    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield");
+    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal");
 }
 
-// Red Left 4 plus the Cup+Pin at the Midfield's edge, which the video's robot
-// left: preload and the wall stack onto the red goal; then about 90 degrees
-// left, the Midfield-edge Cup+Pin onto the black goal (one pin at a time, so it
-// has to be scored before the next wall stack); about 90 degrees left again, the
-// wall stack in front of the black goal onto the black goal; last, the yellow
-// Cup+Pin by the Midfield onto the red goal.
+// Ken's order from the route labeler (2026-11-25): preload, the wall stack by
+// the red goal and the yellow Cup+Pin by the corner onto the red goal; the
+// yellow Cup+Pin by the Midfield, then the wall stack by the black goal, onto
+// the black goal.
 void redLeft5() {
     startAtToggle({-WALL + BACK, -6}, 90);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
-    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal");
+    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    grab(MID_EDGE, "red/blue Cup+Pin at the Midfield edge");
-    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
-    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal");
-    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
-    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield");
+    grab(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE);
     score(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal");
+    grab(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL);
+    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL, "black goal");
+    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE);
+    score(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
 }
 
-// Bottom Quadrant: toggle, preload and one more on the red goal.
+// Bottom Quadrant: toggle, preload and the corner Cup+Pin on the red goal.
 void redRight() {
     startAtToggle({-6, -WALL + BACK}, 0);
     score(RED_GOAL_BOTTOM, LIFT_ALLIANCE_GOAL, "alliance goal (preload)");
-    grab(DIAG_FAR, "diagonal piece by the corner");
+    grab(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
     score(RED_GOAL_BOTTOM, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
 }
 
@@ -430,4 +511,7 @@ void runAuton() {
 #else
     autons[selectedAuton].run();
 #endif
+    // Routes end on a chained move, which leaves the motors running: stop.
+    driveChassis(0, 0);
+    stopChassis(pros::MotorBrake::hold);
 }

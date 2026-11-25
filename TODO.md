@@ -86,28 +86,48 @@ which line of code each measured number replaces.
 
 ## Autons: what's there and what's wrong
 
-Auton time in RW's simulator (not yet fitted to our robot). The overhead
-video's robot (youtube.com/shorts/VCsaetCuP-s) ran Red Left 4's 4 pins in 14.9 s.
+Auton time in RW's simulator (not yet fitted to our robot), run with V4's
+frame for wall contact (`--frame 7.14,7.64,6.14`). The overhead video's robot
+(youtube.com/shorts/VCsaetCuP-s) ran Red Left 4's 4 pins in 14.9 s. The lift
+speed is a guess (`LIFT_DPS`), so the lift waits in these times are too.
 
 | Auton | Does | Sim time | Fits 15 s? |
 |---|---|---|---|
 | Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, corner Cup+Pin → same goal, Midfield Cup+Pin → black goal | 12.6 s | yes |
-| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 21.5 s | no (video robot: 14.9 s) |
-| Red Left 5 / Blue Left 5 | Red Left 4 + the Midfield-edge Cup+Pin → black goal | 25.7 s | no (~19 s even at the video robot's pace) |
-| Red Right 2 / Blue Right 2 | bottom toggle, preload → alliance goal, corner Cup+Pin → same goal | 8.3 s | yes |
+| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 17.7 s, second wall stack missed | no (video robot: 14.9 s) |
+| Red Left 5 / Blue Left 5 | Ken's labeler order: preload, wall stack, corner Cup+Pin → alliance goal; Midfield Cup+Pin, other wall stack → black goal | 24.5 s, second wall stack missed | no |
+| Red Right 2 / Blue Right 2 | bottom toggle, preload → alliance goal, corner Cup+Pin → same goal | 8.1 s | yes |
 | Skills | Red Left 3 + the bottom toggle (rest not planned) | 16.8 s of 60 | |
 
 - [ ] Loose Cup+Pin positions were measured off the video (about +-3 in):
       check them on the field.
-- [ ] Wall-stack move (Red Left 4/5): angled entry, squaring turn, push, grab,
-      wall-contact reset, back out. The simulator can't show the squaring, so
-      prove it on the field. With the front braces on the wall the claw sits
-      0.7 in past the stack's centre: check it still closes.
-- [ ] Red Left 4 needs to get ~30% faster to fit; each wall stack takes ~3.3 s
-      here vs ~2 s for the video robot.
-- [ ] A second video (youtube.com/shorts/pssLb3RYEmM) gets the wall stack
-      by turning in the gap beside the goal and carrying it along the wall to
-      the other goal. For V4 that turn has ~0.5 in of room: worth comparing.
+- [ ] **Wall stacks don't fit V4 well (decide: CAD or route).** Every wall
+      stack sits right in front of a goal, 23.16 in from the wall to the goal's
+      centre. V4 is 14.8 in long with corners 9.42 in (front) and 9.8 in (back)
+      from its centre. Checked with V4's real outline:
+      - Turning in the gap to face the wall (10B's way): hits the goal and the
+        stack by ~1 in at the best spot. Not possible for V4.
+      - Curving in at a shallow angle: only with the robot brushing the goal.
+      - 45 degree entry, corner on the wall, square up (the overhead video's
+        way): clean (goal 5.6 in, stack 0.67 in), but how far the corner slides
+        along the wall while squaring depends on the wall's grip. In the
+        simulator: high grip, both stacks land in the claw; no grip, one misses
+        by 0.3 in.
+      - Leaving the gap after the grab: every way out turns on the spot 10.1 in
+        from the wall with 0.37 in to the goal and 0.39 in to the wall. In the
+        simulator, an inch of overshoot hit the goal or brushed the wall, and
+        with a high-grip wall that brush cost 5-6 in of position (why the
+        second wall stack misses).
+      - Fix with the most margin: the back corners. At 9.43 in from the centre
+        (back 0.5 in shorter, or ~0.6 in cut off each back corner) the turn in
+        the gap gets 0.75 in each side.
+- [ ] Wall-stack move at practice: does the corner hold while squaring
+      (`WALL_TURN_RADIUS`), and does a slide repeat (`WALL_AIM_SHIFT`)? With the
+      front on the wall the stack sits 0.66 in deeper than `REACH`: check the
+      claw still closes on it, and that it centres the stack (the reset after
+      the grab assumes it does).
+- [ ] Red Left 4 is 17.7 s here, ~2.8 s over. Most of it is the wall stacks
+      (~3.5 s each including leaving the gap) and lift waits on a guessed lift speed.
 - [ ] Resets rarely fire in Red Left 3: the robot reaches goals at 15-30 degrees
       off square. Square up before resetting, or accept it.
-- [ ] Red Right 2 leaves ~6.7 s unused.
+- [ ] Red Right 2 leaves ~6.9 s unused.
