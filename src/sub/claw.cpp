@@ -2,6 +2,7 @@
 #include "main.h"
 #include "config.hpp"
 #include "drivetrain.hpp"
+#include "lift.hpp"
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -17,8 +18,10 @@ static std::atomic<bool> armed{false};
 static std::atomic<std::uint32_t> grabs{0};  // autograb closings, for clawGrabWhenSeen()
 // The odometry trigger of autograbArmNear(): off while nearRadius is 0.
 static std::atomic<double> nearX{0}, nearY{0}, nearRadius{0};
+static std::atomic<double> liftAfter{-1};
 static std::atomic<char> how{0};
 static std::atomic<std::uint32_t> whenMs{0};
+static const int CLAW_SHUT_MS = 120;
 
 static void setClaw(bool close) {
     std::lock_guard<pros::Mutex> hold(mutex);
@@ -40,6 +43,12 @@ static void loop() {
                 grabs++;  // before disarming, so clawGrabWhenSeen() sees it when it wakes
                 nearRadius = 0;
                 armed = false;
+                double up = liftAfter;
+                liftAfter = -1;
+                if (up >= 0) {
+                    pros::delay(CLAW_SHUT_MS);  // let it grip before lifting
+                    liftTo(up);
+                }
             }
         }
         pros::delay(10);
@@ -67,11 +76,13 @@ bool clawClosed() {
 
 void autograbArm(bool on) {
     nearRadius = 0;
+    liftAfter = -1;
     if (on) how = 0;
     armed = on;
 }
 
-void autograbArmNear(double x, double y, double radius_in) {
+void autograbArmNear(double x, double y, double radius_in, double lift_after) {
+    liftAfter = lift_after;
     nearX = x;
     nearY = y;
     nearRadius = radius_in;

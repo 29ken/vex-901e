@@ -6,11 +6,13 @@
 #include "tuner.hpp"
 #include "screens.hpp"
 #include "claw.hpp"
+#include "watch.hpp"
 
 void initialize() {
     initDrive();
     initLift();
     initClaw();
+    initWatch();
     startBrainScreen();
     startControllerScreen();
 #ifdef RW_SIM_PROS

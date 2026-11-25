@@ -42,6 +42,7 @@
 #include "autons.hpp"
 #include "drivetrain.hpp"
 #include "claw.hpp"
+#include "watch.hpp"
 #include "config.hpp"
 #include "lift.hpp"
 #include "resets.hpp"
@@ -191,6 +192,7 @@ constexpr double LIFT_NEAR_GRAB = 10;
 void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_GOAL, bool rollOff = true) {
     Pt f = at(centre);
     setPose(f.x, f.y, turned(heading));
+    watchEnable(true);  // the distance-sensor watch: logs only
     stepStart = pros::millis();
     clawGrab();  // the preload goes in the open claw before the match
     setToggle(blue);
@@ -373,6 +375,9 @@ constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: 
 // stack gets the same shift mirrored. Set it if a stack ends off-centre the same
 // way every time. TODO: practice
 constexpr double WALL_AIM_SHIFT = 0;
+// Set after a wall stack the claw's sensor didn't confirm (see resetAtStop()).
+bool stackMayBeBehind = false;
+
 // flow: the approach is one curve through `via`, then down the 45 degree line
 // to the wall, instead of stopping at the line-up point to turn.
 void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY,
@@ -452,6 +457,8 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     } else {
         std::printf("Wall contact: not square (heading %.1f), no reset\n", heading);
     }
+    { Pt gone = at(stack); watchTaken(gone.x, gone.y); }
+    stackMayBeBehind = !seen;  // the simulator's sensor never sees it, so there the back sensor sits this stop out
     liftTo(nextLift);  // rises while it backs out and turns
     driveTo(-(GAP_TURN - FRONT), msFor(GAP_TURN - FRONT) + 300, true, GAP_VOLTS);  // slow: an inch too far and it can't turn
     settle();  // the next move spins here
@@ -516,6 +523,7 @@ constexpr double GRAB_LEAD = 1.5;    // the position backup closes the claw this
 constexpr double GRAB_ON = 1.0;      // keeps rolling this far past the piece's place while the claw closes
 constexpr double SCORE_SLOW = 8;     // the last stretch into a goal starts this far out...
 constexpr double SCORE_SLOW_SPEED = 0.45;  // ...at this fraction of TOP_IPS
+constexpr double LIFT_CLEAR = 2;     // the open claw is clear of a piece it let go this far back. TODO: practice
 constexpr double SCORE_PAST = 0.5;   // aims this far past the stop: RW's follower stops up to 1 in short
 
 // Drives a smooth curve from where the robot is through `pts`. reverse: driving
@@ -568,16 +576,36 @@ void take(Pt piece, const char* name, double nextLift, std::vector<Via> via = {}
     via.push_back({piece.x - u.x * (REACH + GRAB_SLOW), piece.y - u.y * (REACH + GRAB_SLOW), slow});
     via.push_back({piece.x - u.x * (REACH - GRAB_ON), piece.y - u.y * (REACH - GRAB_ON), slow});
     Pt f = at(piece);
-    autograbArmNear(f.x, f.y, REACH + GRAB_LEAD);
+    autograbArmNear(f.x, f.y, REACH + GRAB_LEAD, nextLift);  // the lift starts up as soon as the claw has shut
     // The lift has to be down before the claw gets there.
     curve(via, false, false, topSpeedForLift(legLength(here, via), LIFT_GRAB, LIFT_NEAR_GRAB));
     char how = autograbHow();
     double when = how ? autograbWhenMs() / 1000.0 : pros::millis() / 1000.0;
     clawGrab();  // close anyway, if neither trigger fired
     autograbArm(false);
+    watchTaken(f.x, f.y);
     liftTo(nextLift);  // rises on the way to the goal
     step("took it rolling");
     std::printf("Grab %s: %s at %.2f s\n", name, how == 's' ? "sensor saw it" : how == 'o' ? "closed by position" : "closed at the end of the curve", when);
+}
+
+// Distance-sensor resets at the stops a route already makes (on a goal, the
+// claw takes CLAW_OPEN_MS to open anyway). Tries the sensors that should see a
+// wall from here; each is used only if the robot is within 12 degrees of
+// square to that wall and the reading agrees with where it thinks it is
+// (resets.hpp). Never the front sensor: a goal or piece is in front of it.
+// Not the back one right after a wall stack unless the claw's sensor saw the
+// stack: a stack left at the wall would be read as the wall.
+int resetAtStop() {
+    std::uint32_t start = pros::millis();
+    int fixed = 0;
+    for (ResetSensor sensor : {ResetSensor::Back, ResetSensor::Left, ResetSensor::Right}) {
+        if (sensor == ResetSensor::Back && stackMayBeBehind) continue;
+        ResetPreview p = previewReset(sensor);
+        if (p.installed && p.ok && resetFrom(sensor)) fixed++;
+    }
+    if (fixed) std::printf("Reset at stop: %d sensor(s), %u ms\n", fixed, static_cast<unsigned>(pros::millis() - start));
+    return fixed;
 }
 
 // Puts what the claw holds on a goal (red coordinates): a curve through `via`
@@ -600,7 +628,11 @@ void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via 
     }
     step("in");
     clawRelease();
-    pros::delay(CLAW_OPEN_MS);
+    std::uint32_t opened = pros::millis();
+    resetAtStop();  // while the claw opens
+    stackMayBeBehind = false;
+    std::uint32_t took = pros::millis() - opened;
+    if (took < static_cast<std::uint32_t>(CLAW_OPEN_MS)) pros::delay(CLAW_OPEN_MS - took);
     step("release");
     std::printf("Scored on %s\n", name);
 }
@@ -611,10 +643,13 @@ void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via 
 // claw is clear of the goal. Ends rolling: the next move must be a drive.
 void backAway(double straight, std::vector<Via> then = {}) {
     double h = getInertialHeading() * M_PI / 180;
-    Pt f{x_pos - std::sin(h) * straight, y_pos - std::cos(h) * straight};
-    Pt r = at(f);  // red coordinates
-    curve({{r.x, r.y, then.empty() ? 0.3 : 1.0}}, true, false, TOP_IPS);
+    // The lift starts down once the open claw is LIFT_CLEAR back from the piece it left.
+    double first = std::min(LIFT_CLEAR, straight);
+    Pt c = at({x_pos - std::sin(h) * first, y_pos - std::cos(h) * first});
+    Pt r = at({x_pos - std::sin(h) * straight, y_pos - std::cos(h) * straight});  // red coordinates
+    curve({{c.x, c.y}}, true, false, TOP_IPS);
     liftTo(LIFT_GRAB);
+    curve({{r.x, r.y, then.empty() ? 0.3 : 1.0}}, true, false, TOP_IPS);
     if (!then.empty()) {
         then.back().speed = std::min(then.back().speed, 0.3);  // slow at the end: the next drive goes forwards
         curve(then, true, false, TOP_IPS);
@@ -625,8 +660,9 @@ void backAway(double straight, std::vector<Via> then = {}) {
 // For the gap between a goal and the wall, where there's no room for a reverse
 // curve: the slow straight back-off to where the robot can turn, then stopped.
 void gapBack(Pt goal) {
-    backOffToTurn(at(goal));
+    driveTo(-LIFT_CLEAR, msFor(LIFT_CLEAR), false, GAP_VOLTS);  // the open claw clears the piece, then the lift starts down
     liftTo(LIFT_GRAB);
+    backOffToTurn(at(goal));
     step("back off (gap)");
 }
 
@@ -683,22 +719,24 @@ void redLeft4() {
 // yellow Cup+Pin by the Midfield, then the wall stack by the black goal, onto
 // the black goal.
 void redLeft5() {
+    // Red Left 5 (judge's pick): candidate b with two fixes. preload->RG, W1->RG, YF->RG, YN->BG, W2->BG
     startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
-    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-58.5, -7}, {-54.5, -11}});
-    backAway(4, {{-51.5, -7.5}, {-50.6, -6.8}});
-    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE);
-    faceTo(RED_GOAL_LEFT);
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});  // b/a opening: one bend off the toggle into RG from the NNW
+    backAway(4, {{-51, -8}});  // reverse to just NE of W1's 45 degree line, rolling
+    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, true);  // one curve down the 45 line, no stop at the line-up
+    turnToAngle(turned(90), 900);
     scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    gapBack(RED_GOAL_LEFT);
-    faceTo({-52.9, -35.7});
+    backAway(4, {{-59.5, -23.5}});  // straight off RG to the gap's spin spot (b; faster than gapback+face)
+    settle();
+    turnToAngle(turned(148), 900);
     take(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-52.9, -35.7}});
-    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-42, -48}, {-36, -41}, {-37, -35}});
-    backAway(4, {{-29, -34, 0.5}, {-17.3, -37.9, 0.5}, {-14.6, -43.3}});
+    scoreOn({-46.92, -24.18}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-42, -48}, {-36, -41}, {-37, -35}});  // FIX 1 (from c): aim 0.5 in short / 0.4 in left of RG; worst score 1.42 -> 1.29
+    backAway(4, {{-29, -33.6, 0.8}, {-17.3, -37.9, 0.7}, {-14.6, -43.3}});  // FIX 2 (from a): first point -29,-33.6 not -29,-34; RGB pass 0.07 -> 0.31 in
     take(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL, {{-17.3, -37.9}});
-    scoreOn({-46.5, 23.8}, LIFT_NEUTRAL_GOAL, "black goal", {{-45, -5}, {-51, 9}});
-    backAway(4, {{-50.5, 8.5, 0.6}, {-49.8, 6.2, 0.4}, {-48.4, 4.8}});
-    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE);
-    faceTo(BLACK_GOAL_LEFT);
+    scoreOn({-46.5, 23.8}, LIFT_NEUTRAL_GOAL, "black goal", {{-45, -5}, {-49.5, 8}});  // into BG from the SSW
+    backAway(4, {{-50.5, 8}});  // short reverse toward W2's 45 line start
+    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, true);
+    turnToAngle(turned(90), 900);
     scoreOn(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
 
 }
@@ -894,6 +932,7 @@ void runAuton() {
     autons[selectedAuton].run();
 #endif
     // Routes end on a chained move, which leaves the motors running: stop.
+    watchEnable(false);
     driveChassis(0, 0);
     stopChassis(pros::MotorBrake::hold);
 }

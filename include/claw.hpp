@@ -21,7 +21,8 @@ bool autograbArmed();
 // coordinates. The sensor normally fires first; the odometry trigger is the
 // backup for a piece the sensor misses (a cup's clear half), and the only one
 // the simulator has (its sensor can't see pieces).
-void autograbArmNear(double x, double y, double radius_in);
+// lift_after: if 0 or more, the lift starts for that height as soon as the claw has shut.
+void autograbArmNear(double x, double y, double radius_in, double lift_after = -1);
 // How the last armed grab closed: 's' the sensor, 'o' odometry, 0 not yet. And when (pros::millis()).
 char autograbHow();
 unsigned autograbWhenMs();
