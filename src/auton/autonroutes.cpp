@@ -520,7 +520,7 @@ void score(Pt goal, double liftHeight, const char* name) {
 // RW's path follower needs the drive's feedforward measured on the real robot
 // (measureDriveFeedforward(), rw-config.cpp) before these speeds mean anything.
 constexpr double TOP_IPS = 45;       // top path speed, in/s (RW's default for this drive: 80% of free speed)
-constexpr double GRAB_IPS = 12;      // speed through a piece while the claw closes. TODO: practice
+constexpr double GRAB_IPS = 12;      // speed through a piece while the claw closes. 15 saved ~0.05 s a grab in the simulator but left grabs 1.34 in off-centre (limit 1.42). TODO: practice
 constexpr double GRAB_SLOW = 4;      // already at GRAB_IPS this far before the piece
 constexpr double GRAB_LEAD = 1.5;    // the position backup closes the claw this far before the piece is at the claw point (about GRAB_IPS x CLAW_CLOSE_MS)
 constexpr double GRAB_ON = 1.0;      // keeps rolling this far past the piece's place while the claw closes
@@ -675,18 +675,20 @@ void gapBack(Pt goal) {
 // wall (a toggle only counts once no robot touches it, and for the Autonomous
 // Win Point the robot must not end touching the wall).
 constexpr double TOGGLE_LINEUP = 10;
+constexpr double TOGGLE_ROLL_OFF = 2;  // off the wall and off the toggle afterwards. TODO: practice (does the flapper clear it?)
 void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}) {
     double h = heading * M_PI / 180;
     Pt front{centre.x + std::sin(h) * TOGGLE_LINEUP, centre.y + std::cos(h) * TOGGLE_LINEUP};
     via.push_back({front.x, front.y, 0.5});
     curve(via, false, true, TOP_IPS);
-    turnToAngle(turned(heading), 900);
+    // Already close to square (a reverse curve can arrive that way): no turn needed.
+    if (std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) > 5) turnToAngle(turned(heading), 900);
     step("to the toggle");
     Pt wall = at({centre.x - std::sin(h) * 0.5, centre.y - std::cos(h) * 0.5});
-    moveToPoint(wall.x, wall.y, -1, msFor(TOGGLE_LINEUP), true, 7);
+    moveToPoint(wall.x, wall.y, -1, msFor(TOGGLE_LINEUP), true, 9);
     setToggle(blue);
     step("toggle");
-    driveTo(OFF_WALL, msFor(OFF_WALL));
+    driveTo(TOGGLE_ROLL_OFF, msFor(TOGGLE_ROLL_OFF));
     step("off the wall");
 }
 

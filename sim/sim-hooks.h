@@ -35,6 +35,8 @@ namespace rwsim {
   void rotationSensorSetDeg(int32_t port, double deg);
   double rotationSensorRpm(int32_t port);
   double distanceMm(int32_t port);
+  // A wall stack the robot has taken (field inches): the distance sensors stop seeing it.
+  void fieldPieceTaken(double x, double y);
   uint32_t distanceTimestamp(int32_t port);
 
   // Competition

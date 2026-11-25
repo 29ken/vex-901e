@@ -21,5 +21,9 @@
 void initWatch();
 // On for an auton, off after it. Turning it on forgets earlier runs.
 void watchEnable(bool on);
+// OFF by default. On: each believed reading moves the robot's position 20% of
+// the way toward what the sensor says, instead of only logging. Don't turn it
+// on for a match until practice logs show the watch is right.
+void watchApply(bool on);
 // A piece the robot has taken (field coordinates): no longer in the way of a beam.
 void watchTaken(double x, double y);

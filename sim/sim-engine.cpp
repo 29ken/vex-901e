@@ -571,6 +571,15 @@ double rotationSensorDeg(int32_t port) { return trackers()[port].deg; }
 void rotationSensorSetDeg(int32_t port, double deg) { trackers()[port].deg = deg; }
 double rotationSensorRpm(int32_t port) { return trackers()[port].rpm; }
 
+void fieldPieceTaken(double x, double y) {
+  for (size_t k = 0; k < boxes.size(); k++) {
+    const Box& b = boxes[k];
+    if (b.x1 - b.x0 < 3.5 && std::fabs((b.x0 + b.x1) / 2 - x) < 3 && std::fabs((b.y0 + b.y1) / 2 - y) < 3) {
+      boxes.erase(boxes.begin() + k);
+      return;
+    }
+  }
+}
 double distanceMm(int32_t port) { auto it = distances().find(port); return it == distances().end() ? 9999 : it->second.mm; }
 uint32_t distanceTimestamp(int32_t port) { auto it = distances().find(port); return it == distances().end() ? 0 : it->second.stamp; }
 

@@ -7,6 +7,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#ifdef RW_SIM_PROS
+#include "sim-hooks.h"
+#endif
 
 extern double field_half_size;  // RW's: the walls are this far from the centre
 
@@ -52,6 +56,7 @@ Obstacle obstacles[] = {
 };
 
 std::atomic<bool> enabled{false};
+std::atomic<bool> applying{false};
 
 struct Pose {
     double x, y, heading;
@@ -143,7 +148,13 @@ void loop() {
                     char axis = judge(m, history[LAG_TICKS], readInches(m), odom_turn_rate_dps, error, why);
                     if (!axis) continue;
                     Axis& a = axis == 'x' ? ax : ay;
-                    a.off += GAIN * (error - a.off);
+                    if (applying) {
+                        // Move the position a part of the way; what's left shows up in the next reading.
+                        (axis == 'x' ? x_pos : y_pos) += GAIN * error;
+                        a.off = error * (1 - GAIN);
+                    } else {
+                        a.off += GAIN * (error - a.off);
+                    }
                     a.believed++;
                     a.total++;
                 }
@@ -166,7 +177,14 @@ void loop() {
 
 }  // namespace
 
-void initWatch() { pros::Task task(loop, "Watch"); }
+void initWatch() {
+#ifdef RW_SIM_PROS
+    if (std::getenv("WATCH_APPLY")) applying = true;  // for comparing runs in the simulator
+#endif
+    pros::Task task(loop, "Watch");
+}
+
+void watchApply(bool on) { applying = on; }
 
 void watchEnable(bool on) {
     if (on) {
@@ -176,6 +194,9 @@ void watchEnable(bool on) {
 }
 
 void watchTaken(double x, double y) {
+#ifdef RW_SIM_PROS
+    rwsim::fieldPieceTaken(x, y);  // the simulator's sensors stop seeing it too
+#endif
     for (Obstacle& o : obstacles) {
         if (std::hypot(o.x - x, o.y - y) < 3) o.gone = true;
     }
