@@ -265,11 +265,14 @@ void skills() {
     aimAt(front);
     driveToField(front);
     turnToAngle(turned(0), 1000);
+    step("to the bottom toggle");
     Pt wall = at({-6, -WALL + BACK + 0.5});
     moveToPoint(wall.x, wall.y, -1, msFor(12), true, 6);
     resetNearWalls();
     setToggle(blue);
+    step("toggle");
     driveTo(OFF_WALL, msFor(OFF_WALL));
+    step("off the wall");
 }
 
 template <void (*Route)()>
