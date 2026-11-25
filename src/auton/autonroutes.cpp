@@ -196,7 +196,16 @@ void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_G
 // Turns on the spot only when `t` is more than maxOff degrees off the nose.
 // moveToPoint steers on the way, but backs up while facing more than 90 away,
 // and stops steering for its last 8 in.
+// Set after backing off between a goal and a wall: there a forward curve
+// drives a corner into the goal (0.56 in in the simulator), so the next move
+// turns on the spot first, however small the turn.
+bool turnOnSpotNext = false;
+
 void aimIfNeeded(Pt t, double maxOff) {
+    if (turnOnSpotNext) {
+        maxOff = std::min(maxOff, 3.0);
+        turnOnSpotNext = false;
+    }
     double bearing = std::atan2(t.x - x_pos, t.y - y_pos) * 180 / M_PI;
     if (std::fabs(std::remainder(bearing - getInertialHeading(), 360.0)) > maxOff) aimAt(t);
 }
@@ -445,6 +454,7 @@ void backOffToTurn(Pt goal) {
     }
     driveTo(-best, msFor(best) + 300, true, GAP_VOLTS);
     settle();
+    turnOnSpotNext = true;
     std::printf("Back off %.2f in: %.2f in to spare when it turns\n", best, most);
 }
 
