@@ -21,6 +21,33 @@ int resetFrom(std::initializer_list<ResetSensor> sensors);
 // the robot thinks it is, so it costs no time when no wall is close.
 int resetNearWalls();
 
+// What a reset from one sensor would do right now, without doing it: the same
+// checks resetFrom() makes, minus waiting for the robot to stop and comparing
+// three readings. The brain screen's Distance page shows these.
+struct ResetPreview {
+    bool installed;
+    bool seesWall;
+    double rawIn;     // the sensor's reading, inches, before its scale
+    double readingIn; // after its scale
+    bool ok;          // a reset would use it
+    char axis;        // 'x' or 'y': which one it would set (when the geometry works)
+    double newPos;    // what that would become
+    const char* why;  // a few words when !ok
+};
+ResetPreview previewReset(ResetSensor sensor);
+const char* resetSensorName(ResetSensor sensor);
+
+// Each sensor's readings are multiplied by its scale (V5 distance sensors often
+// read 1-3% long). Find them on the brain's Distance page: press the middle
+// button, set the tape distance with left/right, park one sensor's lens that far
+// from a wall, square to it, and read that sensor's "x" number. 1.0 = no
+// correction. Leave RW's distance_sensor_scale (rw-config.cpp) at 1.0: RW
+// multiplies by it on top of these.
+inline constexpr double SCALE_FRONT = 1.0;  // TODO: practice
+inline constexpr double SCALE_BACK = 1.0;   // TODO: practice
+inline constexpr double SCALE_LEFT = 1.0;   // TODO: practice
+inline constexpr double SCALE_RIGHT = 1.0;  // TODO: practice
+
 // Tuning. Every number here is a starting guess until it's tested on a field.
 
 // Only trust a reading when the robot is this close to square with the walls.

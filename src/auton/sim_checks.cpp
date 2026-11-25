@@ -11,6 +11,7 @@
 #include "claw.hpp"
 #include "lift.hpp"
 #include "resets.hpp"
+#include "screens.hpp"
 #include <cstdio>
 
 static void printPose(const char* when) {
@@ -63,10 +64,35 @@ static void checkLiftAndClaw() {
                 pros::millis() - t0);
 }
 
+static void printPreviews() {
+    for (ResetSensor s : {ResetSensor::Front, ResetSensor::Back, ResetSensor::Left, ResetSensor::Right}) {
+        ResetPreview p = previewReset(s);
+        if (p.ok) {
+            std::printf("  preview %-5s %5.1f in -> %c %.2f\n", resetSensorName(s), p.readingIn, p.axis, p.newPos);
+        } else {
+            std::printf("  preview %-5s %5.1f in    %s\n", resetSensorName(s), p.readingIn, p.why);
+        }
+    }
+}
+
+// Run with --start -46,-43.34,180: the front sensor's lens is then exactly 24 in
+// from the -y wall. The simulator's sensors read 1.2% long, so the Distance
+// page should print SCALE_FRONT close to 0.988. The code is told it's 1.5 in off
+// in X and Y, so the previews should show the corrections.
+static void checkDistancePage() {
+    setPose(-44.5, -44.84, 180);
+    printPreviews();
+    showDistancePage(24);
+    pros::delay(3000);  // the brain screen averages 2 s, then prints the scale to the terminal
+    turnToAngle(195, 1000);  // 15 degrees off square: every preview should say so
+    printPreviews();
+}
+
 void registerSimAutons() {
     for (int i = 0; i < autonCount; i++) addAuton(autons[i].name, autons[i].run);
-    // RW's list holds 12. These two go last so the robot's autons keep their numbers.
+    // RW's list holds 12. These go last so the robot's autons keep their numbers.
     addAuton("Check: resets", checkResets);
     addAuton("Check: lift and claw", checkLiftAndClaw);
+    addAuton("Check: distance page", checkDistancePage);
 }
 #endif
