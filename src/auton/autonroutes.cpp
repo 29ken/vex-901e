@@ -352,7 +352,11 @@ constexpr double GAP_TURN = 10.1;         // centre from the wall when spinning 
 constexpr double GAP_VOLTS = 5;           // backing out to GAP_TURN: at 8 V it went an inch too far
 constexpr double WALL_PAST = 1;           // aims this far past the contact point: moveToPoint stops about 1 in early
 constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: practice
-constexpr double WALL_AIM_SHIFT = 0;      // along the wall, toward the side it comes from, if the stack ends off-centre in the claw. TODO: practice
+// Moves where the claw ends along the wall: positive is away from the side the
+// robot comes from (the code aims at stack - along * shift), and the second wall
+// stack gets the same shift mirrored. Set it if a stack ends off-centre the same
+// way every time. TODO: practice
+constexpr double WALL_AIM_SHIFT = 0;
 void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY) {
     double a = faceWall * M_PI / 180;
     Pt toWall{std::sin(a), std::cos(a)};
@@ -381,10 +385,11 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         aroundObstacles(l);
         aimIfNeeded(l, TURN_FIRST);
         moveToPoint(l.x, l.y, 1, msFor(distanceTo(l)), true);  // stops on the 45 degree line
+        settle();  // still rolling ~16 in/s here, it coasted 1.8 in past the line-up point during the turn
         turnToAngle(turned(contactHeading), 700);  // and faces along it: the corner has to meet the wall where planned
     }
     step(direct ? "to the wall stack (straight in)" : "to the wall stack");
-    aimIfNeeded(k, TURN_FIRST);
+    aimIfNeeded(k, FINAL_AIM_DEG);  // the drive-in is straight: arriving 8 degrees off moved the claw ~2 in
     moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
     step("corner on the wall");
     curveCircle(turned(faceWall), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // squares up, pressing the corner on the wall
