@@ -1,6 +1,6 @@
 // Simulator only: this whole file is empty on the robot. sh sim/run-sim.sh
 // builds with RW_SIM_PROS and runs autons by name, e.g.
-//   sh sim/run-sim.sh "Red Left" --start -62.61,-6,90
+//   sh sim/run-sim.sh "Red Left 3" --start -62.61,-6,90
 //   sh sim/run-sim.sh "Check: resets" --start -46,-46,180
 // --start is where the simulated robot really is. Give the auton's own
 // setPose(), or the simulator treats the auton's coordinates as relative and

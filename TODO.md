@@ -88,15 +88,15 @@ which line of code each measured number replaces.
 
 | Auton | Does | Sim time |
 |---|---|---|
-| Red Left / Blue Left | toggle, preload → alliance goal, piece → same goal, piece → black goal | 13.4 s |
-| Red Right / Blue Right | toggle, preload → alliance goal, piece → same goal | 9.3 s |
-| Skills | Red Left + the bottom toggle (rest not planned) | 17.8 s of 60 |
+| Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, piece → same goal, piece → black goal | 13.4 s |
+| Red Right 2 / Blue Right 2 | toggle, preload → alliance goal, piece → same goal | 9.3 s |
+| Skills | Red Left 3 + the bottom toggle (rest not planned) | 17.8 s of 60 |
 
 - [ ] **The second piece onto the same goal probably scores nothing.** <SC2>: a
       goal holds one Pin half; more Pins only count stacked with a Cup between.
       Send it to a different goal instead, unless the piece is a Cup+Pin stack.
 - [ ] Two piece positions are guesses from the old routes: (-23, -23) and
       (-50, -50) on red's side. Check what and where they are.
-- [ ] Resets rarely fire in Red Left: the robot reaches goals at 15-30 degrees
+- [ ] Resets rarely fire in Red Left 3: the robot reaches goals at 15-30 degrees
       off square. Square up before resetting, or accept it.
-- [ ] Red Right leaves ~5.7 s unused.
+- [ ] Red Right 2 leaves ~5.7 s unused.

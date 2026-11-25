@@ -30,10 +30,10 @@
 //    about 1.2 in from the Cup+Pin stack there.
 //
 // Try them in the simulator (--start is where each route's setPose puts it):
-//   sh sim/run-sim.sh "Red Left"   --start -62.61,-6,90
-//   sh sim/run-sim.sh "Red Right"  --start -6,-62.61,0
-//   sh sim/run-sim.sh "Blue Left"  --start 62.61,6,270
-//   sh sim/run-sim.sh "Blue Right" --start 6,62.61,180
+//   sh sim/run-sim.sh "Red Left 3"   --start -62.61,-6,90
+//   sh sim/run-sim.sh "Red Right 2"  --start -6,-62.61,0
+//   sh sim/run-sim.sh "Blue Left 3"  --start 62.61,6,270
+//   sh sim/run-sim.sh "Blue Right 2" --start 6,62.61,180
 //   sh sim/run-sim.sh "Skills"     --start -62.61,-6,90 --time 60
 
 #include "autons.hpp"
@@ -254,7 +254,7 @@ void redRight() {
     score(RED_GOAL_BOTTOM, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
 }
 
-// Both red toggles plus Red Left's scoring. Only the start is planned: the rest
+// Both red toggles plus Red Left 3's scoring. Only the start is planned: the rest
 // of the minute needs piece positions from the manual's field drawing, and the
 // loaders, which aren't planned.
 void skills() {
@@ -285,12 +285,13 @@ void asBlue() {
 }  // namespace
 
 // The brain screen's selector lists these in order; runAuton() runs the one picked.
+// The number in a name is how many pins that auton puts on goals.
 const Auton autons[] = {
     {"None", none},
-    {"Red Left", redLeft},
-    {"Red Right", redRight},
-    {"Blue Left", asBlue<redLeft>},
-    {"Blue Right", asBlue<redRight>},
+    {"Red Left 3", redLeft},
+    {"Red Right 2", redRight},
+    {"Blue Left 3", asBlue<redLeft>},
+    {"Blue Right 2", asBlue<redRight>},
     {"Skills", skills},
 };
 const int autonCount = sizeof(autons) / sizeof(autons[0]);
