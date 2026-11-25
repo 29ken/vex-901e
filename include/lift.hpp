@@ -42,6 +42,12 @@ LiftStatus liftStatus();
 
 // Tuning, all in lift sensor degrees.
 inline constexpr double LIFT_KP = 0.5;            // power per degree off target
+// Auton moves (liftTo) brake later: full power until 127 / LIFT_KP_AUTON = 64
+// degrees from the target, where the driver's presets start easing in at 254.
+// Every auton lift move was spending about 0.7 s easing in. Untested on the
+// real lift: if it overshoots or bounces with a piece in the claw, lower this
+// toward LIFT_KP. TODO: practice
+inline constexpr double LIFT_KP_AUTON = 2.0;
 // Speed of the last stretch to a preset. It has to beat the weight of the lift
 // plus whatever it's carrying; if a preset stops short, raise this.
 inline constexpr int LIFT_MIN_POWER = 25;
@@ -117,6 +123,7 @@ struct LiftControl {
     bool backwards = false;
     double zero = 0;    // raw sensor reading at the bottom
     double target = 0;  // height being driven to
+    double kp = LIFT_KP;  // LIFT_KP_AUTON for auton moves
     int approach = 1;   // +1 going up to the target, -1 coming down to it
     int manualPower = 0;
     double stoppedShort = 0;  // how far short the last move ran out of time
@@ -166,6 +173,7 @@ struct LiftControl {
         } else {
             driveTo(height_, raw, now);
         }
+        kp = LIFT_KP_AUTON;  // driveTo() set the driver's gain
     }
 
     void downButton(bool held, double raw, std::uint32_t now) {
@@ -212,7 +220,7 @@ struct LiftControl {
                     mode = IDLE;
                     return 0;
                 }
-                double power = std::clamp(error * LIFT_KP, -127.0, 127.0);
+                double power = std::clamp(error * kp, -127.0, 127.0);
                 if (std::fabs(power) < LIFT_MIN_POWER) power = std::copysign(LIFT_MIN_POWER, error);
                 if (std::fabs(power) < LIFT_WRONG_WAY_POWER) {
                     startRaw = raw;  // only judge direction while pushing hard
@@ -230,6 +238,7 @@ struct LiftControl {
   private:
     void driveTo(double height_, double raw, std::uint32_t now) {
         begin(TARGET, raw, now);
+        kp = LIFT_KP;
         target = height_;
         approach = target > height(raw) ? 1 : -1;
     }
