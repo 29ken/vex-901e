@@ -5,12 +5,17 @@
 #include "lift.hpp"
 #include "tuner.hpp"
 #include "screens.hpp"
+#include "claw.hpp"
 
 void initialize() {
     initDrive();
     initLift();
+    initClaw();
     startBrainScreen();
     startControllerScreen();
+#ifdef RW_SIM_PROS
+    registerSimAutons();  // so sh sim/run-sim.sh can pick autons by name
+#endif
 }
 
 void disabled() {}
@@ -26,14 +31,10 @@ void opcontrol() {
 
     heading_correction = false; //possibly remove
     pros::Controller master(pros::E_CONTROLLER_MASTER);
-    pros::adi::DigitalOut claw('B');
-    pros::Distance distance_sensor(3);
 
-    bool claw_extended = false;
-    bool autograb_armed = false;
-
-    // pistons starting variables
-    claw.set_value(claw_extended);
+    // The claw keeps whatever auton left it holding (it starts open at power-on).
+    // An autograb armed during auton doesn't carry over.
+    autograbArm(false);
 
     applyDriverBrakes();
 
@@ -55,29 +56,18 @@ void opcontrol() {
         // 3. A: manual toggle of the claw. While the controller menu is open
         // (X), A is the menu's + button instead.
         if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
-            claw_extended = !claw_extended;
-            claw.set_value(claw_extended);
+            clawToggle();
         }
 
-        // 4. L1: arm/disarm the sensor + autograb
+        // 4. L1: arm/disarm autograb. The claw task (src/sub/claw.cpp) watches
+        // the sensor and grabs once, then disarms itself.
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-            autograb_armed = !autograb_armed;
+            autograbArm(!autograbArmed());
         }
 
         // 5. L2: let go of the pin
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
-            claw_extended = false;
-            claw.set_value(claw_extended);
-        }
-
-        // 6. Autograb: only runs while armed, grabs once, then disarms itself
-        if (autograb_armed) {
-            int32_t d = distance_sensor.get();
-            if (d > 0 && d < 51) {
-                claw_extended = true;
-                claw.set_value(claw_extended);
-                autograb_armed = false;
-            }
+            clawRelease();
         }
 
         pros::delay(10);  // inside da loop

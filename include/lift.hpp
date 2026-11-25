@@ -23,6 +23,15 @@ void liftDown();
 // if the program was started with the lift up.
 void liftDownButton(bool held);
 
+// For autons. liftTo() starts a move to a height (lift sensor degrees above the
+// bottom, the same units as LIFT_PRESETS) and returns straight away, so the
+// robot can drive while the lift moves. liftWait() waits for that move to end
+// and says whether the lift got within LIFT_TOLERANCE of the height. With no
+// working lift sensor, liftTo() does nothing and liftWait() returns false.
+void liftTo(double height);
+bool liftMoving();
+bool liftWait(int timeout_ms = 3500);
+
 struct LiftStatus {
     bool sensorOk;
     bool zeroed;
@@ -147,6 +156,16 @@ struct LiftControl {
 
     void down(double raw, std::uint32_t now) {
         if (zeroed && !backwards && height(raw) > LIFT_BOTTOM) driveTo(0, raw, now);
+    }
+
+    // Any height, for autons. At or under LIFT_BOTTOM means the bottom.
+    void goTo(double height_, double raw, std::uint32_t now) {
+        if (!zeroed || backwards) return;
+        if (height_ <= LIFT_BOTTOM) {
+            down(raw, now);
+        } else {
+            driveTo(height_, raw, now);
+        }
     }
 
     void downButton(bool held, double raw, std::uint32_t now) {

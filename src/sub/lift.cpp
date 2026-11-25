@@ -12,9 +12,17 @@ static pros::Mutex mutex;
 static LiftControl control;
 
 static bool readSensor(double& raw) {
+#ifdef RW_SIM_PROS
+    // The simulator only simulates rotation sensors used as tracking wheels. The
+    // motors turn the winch shaft directly, so their position stands in for the
+    // sensor there. It has no load on it, so sim lift moves run a bit fast.
+    raw = lift.get_position(0);
+    return true;
+#else
     std::int32_t centidegrees = sensor.get_position();
     raw = centidegrees / 100.0;
     return centidegrees != PROS_ERR;
+#endif
 }
 
 // The lift motors' speed, + is up. They're geared together, so either one's
@@ -113,6 +121,31 @@ void liftDownButton(bool held) {
     if (!readSensor(raw)) return;
     std::lock_guard<pros::Mutex> hold(mutex);
     control.downButton(held, raw, pros::millis());
+}
+
+void liftTo(double height) {
+    double raw;
+    if (!readSensor(raw)) return;
+    std::lock_guard<pros::Mutex> hold(mutex);
+    control.goTo(height, raw, pros::millis());
+}
+
+bool liftMoving() {
+    std::lock_guard<pros::Mutex> hold(mutex);
+    return control.mode == LiftControl::TARGET;
+}
+
+bool liftWait(int timeout_ms) {
+    std::uint32_t start = pros::millis();
+    while (liftMoving() && pros::millis() - start < static_cast<std::uint32_t>(timeout_ms)) {
+        pros::delay(10);
+    }
+    double raw;
+    if (!readSensor(raw)) return false;
+    std::lock_guard<pros::Mutex> hold(mutex);
+    if (control.mode == LiftControl::TARGET) return false;  // still going: timed out
+    // The bottom limit stops it LIFT_BOTTOM above 0, which counts as there.
+    return control.zeroed && std::fabs(control.target - control.height(raw)) <= LIFT_TOLERANCE;
 }
 
 LiftStatus liftStatus() {

@@ -2,9 +2,14 @@
 #include <cstdint>
 
 // Our ports and settings. The drive, IMU and distance sensors, and RW's own
-// tuning, are in src/rw-config.cpp. The claw piston (3-wire B) and the
-// autograb distance sensor (port 3) are in src/main.cpp. Negative port = motor
-// is reversed. Port 15 is the radio.
+// tuning, are in src/rw-config.cpp. Negative port = motor is reversed. Port 15
+// is the radio.
+
+// Claw piston (3-wire port letter) and the autograb distance sensor under it.
+inline constexpr char CLAW_PORT = 'B';
+inline constexpr std::int8_t AUTOGRAB_SENSOR = 3;
+// Armed autograb closes the claw once something is closer than this (mm).
+inline constexpr int AUTOGRAB_MM = 51;
 
 // Cascade lift. If the two sides fight each other, flip the sign on one.
 inline constexpr std::int8_t LIFT_LEFT  = -17;
