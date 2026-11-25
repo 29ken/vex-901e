@@ -165,6 +165,8 @@ void driveToField(Pt p, double volts = 12) {
 constexpr double TURN_FIRST = 60;  // turn on the spot first only past this many degrees; under it the drive curves while moving
 constexpr double FINAL_RUN = 6;    // the last stretch into a goal or piece, straight
 constexpr double FINAL_VOLTS = 9;
+constexpr double FINAL_AIM_DEG = 3;  // re-aim before the last stretch when more off than this
+constexpr double EARLY_EXIT = 1;     // moveToPoint stops about this far short: aim this far past
 constexpr double DRIVE_IPS = 35;   // rough average speed, to guess whether the lift will be up in time. TODO: practice
 constexpr double LIFT_DPS = 400;   // rough lift speed with a load, sensor degrees per second. TODO: practice
 // Close enough to drive in: the lift finishes the last bit on the way. Scoring
@@ -278,7 +280,11 @@ void clawTo(Pt t, bool armAutograb, double liftTarget, double liftNear) {
         aimIfNeeded(t, 3);
     }
     if (armAutograb) autograbArm(true);  // closes as soon as the sensor sees it
-    Pt stop = clawStop(t);
+    // The last stretch goes straight (moveToPoint stops steering 8 in out), so
+    // face the target first: coming out of a chained move the robot can be
+    // 15-20 degrees off, which put pieces 2.7-3.5 in beside the claw.
+    aimIfNeeded(t, FINAL_AIM_DEG);
+    Pt stop = clawStop(t, -EARLY_EXIT);
     moveToPoint(stop.x, stop.y, 1, msFor(FINAL_RUN + 2), true, FINAL_VOLTS);
     step("in");
 }
@@ -369,14 +375,26 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     clawGrab();
     pros::delay(CLAW_CLOSE_MS);
     step("grabbed at the wall");
-    // Square on the wall and holding the stack: the robot is `back` behind the
-    // stack, and the stack's place on the field is known.
+    // Square on the wall, the front is on it: that gives the distance from the
+    // wall. Holding the stack, whose place is known, gives the place along the
+    // wall too, but only if the stack really is in the claw: a missed grab
+    // would set it ~2 in wrong and every later grab would miss (seen in the
+    // simulator). The claw's sensor says whether it's there; the simulator's
+    // sensor can't see pieces, so there it's always trusted.
+#ifdef RW_SIM_PROS
+    bool holding = true;
+#else
+    bool holding = seen;
+#endif
     double heading = getInertialHeading();
     if (std::fabs(std::remainder(heading - turned(faceWall), 360.0)) <= 4) {
-        Pt now{stack.x - toWall.x * back, stack.y - toWall.y * back};
-        Pt before = at({x_pos, y_pos}), f = at(now);
+        Pt before = at({x_pos, y_pos});
+        double off = (before.x * toWall.x + before.y * toWall.y) - (WALL - FRONT);  // how far past the wall RW thinks the front is
+        Pt now{before.x - toWall.x * off, before.y - toWall.y * off};
+        if (holding) now = {stack.x - toWall.x * back, stack.y - toWall.y * back};
+        Pt f = at(now);
         setPose(f.x, f.y, heading);
-        std::printf("Wall contact: (%.2f, %.2f) -> (%.2f, %.2f)\n", before.x, before.y, now.x, now.y);
+        std::printf("Wall contact%s: (%.2f, %.2f) -> (%.2f, %.2f)\n", holding ? " + stack" : "", before.x, before.y, now.x, now.y);
     } else {
         std::printf("Wall contact: not square (heading %.1f), no reset\n", heading);
     }
