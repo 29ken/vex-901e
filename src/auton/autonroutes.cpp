@@ -178,7 +178,7 @@ constexpr double FINAL_VOLTS = 9;
 constexpr double FINAL_AIM_DEG = 3;  // re-aim before the last stretch when more off than this
 constexpr double EARLY_EXIT = 1;     // moveToPoint stops about this far short: aim this far past
 constexpr double DRIVE_IPS = 35;   // rough average speed, to guess whether the lift will be up in time. TODO: practice
-constexpr double LIFT_DPS = 400;   // rough lift speed with a load, sensor degrees per second. TODO: practice
+constexpr double LIFT_DPS = 550;   // rough lift speed, sensor degrees per second (the simulator unloaded lift does ~600). TODO: measure at practice
 // Close enough to drive in: the lift finishes the last bit on the way. Scoring
 // only needs the piece above the goal; grabbing needs the claw right down.
 constexpr double LIFT_NEAR_SCORE = 40;  // sensor degrees. TODO: practice
@@ -719,25 +719,26 @@ void redLeft4() {
 // yellow Cup+Pin by the Midfield, then the wall stack by the black goal, onto
 // the black goal.
 void redLeft5() {
-    // Red Left 5 (judge's pick): candidate b with two fixes. preload->RG, W1->RG, YF->RG, YN->BG, W2->BG
+    // Red Left 5 (judge's pick, work3): candidate a + c's YN take aim + the RG->YN loop's first point 0.2 in further from RGB.
+    // preload->RG, W1->RG, YF->RG, YN->BG, W2->BG
     startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
-    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});  // b/a opening: one bend off the toggle into RG from the NNW
-    backAway(4, {{-51, -8}});  // reverse to just NE of W1's 45 degree line, rolling
-    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, true);  // one curve down the 45 line, no stop at the line-up
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});  // one bend off the toggle into RG from the NNW (a faster via makes the W1 grab a knife edge)
+    backAway(4, {{-51, -8}});  // ends within 0.75 in of W1's line-up, so the code's 0.6 cap there is dropped
+    grabWallStack(STACK_BY_RED_GOAL, 270, +1, "wall stack by the alliance goal", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, true);
     turnToAngle(turned(90), 900);
     scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal");
-    backAway(4, {{-59.5, -23.5}});  // straight off RG to the gap's spin spot (b; faster than gapback+face)
+    backAway(4, {{-59.5, -23.5}});  // straight off RG to the gap's spin spot
     settle();
     turnToAngle(turned(148), 900);
     take(DIAG_FAR, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-52.9, -35.7}});
-    scoreOn({-46.92, -24.18}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-42, -48}, {-36, -41}, {-37, -35}});  // FIX 1 (from c): aim 0.5 in short / 0.4 in left of RG; worst score 1.42 -> 1.29
-    backAway(4, {{-29, -33.6, 0.8}, {-17.3, -37.9, 0.7}, {-14.6, -43.3}});  // FIX 2 (from a): first point -29,-33.6 not -29,-34; RGB pass 0.07 -> 0.31 in
-    take(DIAG_NEAR, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL, {{-17.3, -37.9}});
-    scoreOn({-46.5, 23.8}, LIFT_NEUTRAL_GOAL, "black goal", {{-45, -5}, {-49.5, 8}});  // into BG from the SSW
-    backAway(4, {{-50.5, 8}});  // short reverse toward W2's 45 line start
-    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, true);
+    scoreOn({-46.7, -23.8}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-42, -48}, {-36, -41}, {-37, -35}});  // lift-bound leg; aim centred between the slide and stick wall models
+    backAway(4, {{-29, -33.4, 0.8}, {-17.3, -37.9, 0.7}, {-14.6, -43.3}});  // judge: first point 0.2 in further from RGB (RGB pass 0.28 -> 0.47 in, same time)
+    take({-23.14, -25.84}, "yellow Cup+Pin by the Midfield", LIFT_NEUTRAL_GOAL, {{-17.3, -37.9}});  // from c: aim 0.6 in short of YN along the approach (slide grab depth 4.4 -> 5.0 in, limit 3.92)
+    scoreOn({-46.5, 23.8}, LIFT_NEUTRAL_GOAL, "black goal", {{-45, -5}, {-50.55, 8.55}});  // BG scored at ~20 deg, mirror of the preload's 157
+    backAway(4, {{-52, 7.7}});  // cusp on W2's line-up (mirror of W1's)
+    grabWallStack(STACK_BY_BLACK_GOAL, 270, -1, "wall stack by the black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, true, {{-52.4, 8.3, 1}});  // usually dropped with the code's 0.6-capped line-up point (0.75 in rule); when kept, W2 is ~0.15 s slower
     turnToAngle(turned(90), 900);
-    scoreOn(BLACK_GOAL_LEFT, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");
+    scoreOn({-47.09, 24.23}, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "black goal");  // aim centred after W2's reset
 
 }
 
