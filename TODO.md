@@ -86,17 +86,28 @@ which line of code each measured number replaces.
 
 ## Autons: what's there and what's wrong
 
-| Auton | Does | Sim time |
-|---|---|---|
-| Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, piece → same goal, piece → black goal | 13.4 s |
-| Red Right 2 / Blue Right 2 | toggle, preload → alliance goal, piece → same goal | 9.3 s |
-| Skills | Red Left 3 + the bottom toggle (rest not planned) | 17.8 s of 60 |
+Auton time in RW's simulator (not yet fitted to our robot). The overhead
+video's robot (youtube.com/shorts/VCsaetCuP-s) ran Red Left 4's 4 pins in 14.9 s.
 
-- [ ] **The second piece onto the same goal probably scores nothing.** <SC2>: a
-      goal holds one Pin half; more Pins only count stacked with a Cup between.
-      Send it to a different goal instead, unless the piece is a Cup+Pin stack.
-- [ ] Two piece positions are guesses from the old routes: (-23, -23) and
-      (-50, -50) on red's side. Check what and where they are.
+| Auton | Does | Sim time | Fits 15 s? |
+|---|---|---|---|
+| Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, corner Cup+Pin → same goal, Midfield Cup+Pin → black goal | 12.6 s | yes |
+| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 21.5 s | no (video robot: 14.9 s) |
+| Red Left 5 / Blue Left 5 | Red Left 4 + the Midfield-edge Cup+Pin → black goal | 25.7 s | no (~19 s even at the video robot's pace) |
+| Red Right 2 / Blue Right 2 | bottom toggle, preload → alliance goal, corner Cup+Pin → same goal | 8.3 s | yes |
+| Skills | Red Left 3 + the bottom toggle (rest not planned) | 16.8 s of 60 | |
+
+- [ ] Loose Cup+Pin positions were measured off the video (about +-3 in):
+      check them on the field.
+- [ ] Wall-stack move (Red Left 4/5): angled entry, squaring turn, push, grab,
+      wall-contact reset, back out. The simulator can't show the squaring, so
+      prove it on the field. With the front braces on the wall the claw sits
+      0.7 in past the stack's centre: check it still closes.
+- [ ] Red Left 4 needs to get ~30% faster to fit; each wall stack takes ~3.3 s
+      here vs ~2 s for the video robot.
+- [ ] A second video (youtube.com/shorts/pssLb3RYEmM) gets the wall stack
+      by turning in the gap beside the goal and carrying it along the wall to
+      the other goal. For V4 that turn has ~0.5 in of room: worth comparing.
 - [ ] Resets rarely fire in Red Left 3: the robot reaches goals at 15-30 degrees
       off square. Square up before resetting, or accept it.
-- [ ] Red Right 2 leaves ~5.7 s unused.
+- [ ] Red Right 2 leaves ~6.7 s unused.

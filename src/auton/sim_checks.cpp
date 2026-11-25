@@ -89,7 +89,8 @@ static void checkDistancePage() {
 }
 
 void registerSimAutons() {
-    for (int i = 0; i < autonCount; i++) addAuton(autons[i].name, autons[i].run);
+    // Leaves out "None" (index 0): RW's list holds 12, and ours plus the checks would be 13.
+    for (int i = 1; i < autonCount; i++) addAuton(autons[i].name, autons[i].run);
     // RW's list holds 12. These go last so the robot's autons keep their numbers.
     addAuton("Check: resets", checkResets);
     addAuton("Check: lift and claw", checkLiftAndClaw);
