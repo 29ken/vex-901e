@@ -94,8 +94,8 @@ speed is a guess (`LIFT_DPS`), so the lift waits in these times are too.
 | Auton | Does | Sim time | Fits 15 s? |
 |---|---|---|---|
 | Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, corner Cup+Pin → same goal, Midfield Cup+Pin → black goal | 13.2 s, 3 pins | yes |
-| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 18.6 s; 2 pins (sliding wall) or 1 (gripping wall) | no (video robot: 14.9 s) |
-| Red Left 5 / Blue Left 5 | Ken's labeler order: preload, wall stack, corner Cup+Pin → alliance goal; Midfield Cup+Pin, other wall stack → black goal | 23.6 s; 5 pins (sliding wall, 3 by 15 s) or 1 (gripping wall) | no |
+| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 18.9 s; 4 pins with either wall, 3 of them by 15 s | no (video robot: 14.9 s) |
+| Red Left 5 / Blue Left 5 | Ken's labeler order: preload, wall stack, corner Cup+Pin → alliance goal; Midfield Cup+Pin, other wall stack → black goal | 23.9 s; 4 pins (gripping wall; the 5th lost to a simulator quirk) or 3 (sliding wall) | no |
 | Red Right 2 / Blue Right 2 | bottom toggle, preload → alliance goal, corner Cup+Pin → same goal | 8.7 s, 2 pins | yes |
 | Skills | Red Left 3 + the bottom toggle (rest not planned) | 17.5 s of 60 | |
 
@@ -126,11 +126,16 @@ speed is a guess (`LIFT_DPS`), so the lift waits in these times are too.
       front on the wall the stack sits 0.66 in deeper than `REACH`: check the
       claw still closes on it, and that it centres the stack (the reset after
       the grab assumes it does).
-- [ ] Red Left 4 is 18.6 s here, ~3.6 s over. Most of it is the wall stacks
+- [ ] Red Left 4 is 18.9 s here, ~3.9 s over. Most of it is the wall stacks
       (~3.5 s each including leaving the gap) and lift waits on a guessed lift speed.
 - [ ] A missed wall stack costs the rest of the route: the squaring curve slides
       the robot sideways, which the drive encoders can't see (RW 5-7 in out just
-      before the reset). Only holding the stack tells it where it is along the wall.
+      before the reset). Only holding the stack tells it where it is along the wall,
+      and that reset assumes the stack is centred in the claw: a stack 1.4 in
+      off-centre left RW 1.4 in out and both loose Cup+Pins after it missed
+      (Red Left 5, sliding wall).
+- [ ] Simulator quirk: it never removes a piece the robot took, so a distance
+      sensor can read a wall stack that's already in the claw (Red Left 5's last pin).
 - [ ] Scoring, the claw's U-opening has only 0.19 in to spare each side of a goal:
       at 1.2 in off-centre its arm meets the goal ~1 in early (Red Left 3's black goal).
 - [ ] Resets rarely fire in Red Left 3: the robot reaches goals at 15-30 degrees
