@@ -16,6 +16,16 @@ bool clawClosed();
 void autograbArm(bool armed);
 bool autograbArmed();
 
+// For grabbing on the move: arms autograb, and also closes the claw once the
+// robot's centre (RW's odometry) is within radius_in of (x, y) in field
+// coordinates. The sensor normally fires first; the odometry trigger is the
+// backup for a piece the sensor misses (a cup's clear half), and the only one
+// the simulator has (its sensor can't see pieces).
+void autograbArmNear(double x, double y, double radius_in);
+// How the last armed grab closed: 's' the sensor, 'o' odometry, 0 not yet. And when (pros::millis()).
+char autograbHow();
+unsigned autograbWhenMs();
+
 // For autons: arms autograb and waits until it grabs or timeout_ms passes.
 // Returns true if it grabbed; on a timeout it disarms and leaves the claw as is.
 bool clawGrabWhenSeen(int timeout_ms);

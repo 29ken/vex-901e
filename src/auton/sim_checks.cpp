@@ -13,6 +13,7 @@
 #include "resets.hpp"
 #include "screens.hpp"
 #include <cstdio>
+#include <cstdlib>
 
 static void printPose(const char* when) {
     std::printf("%-28s x %6.2f  y %6.2f  heading %6.1f\n", when, x_pos, y_pos, getInertialHeading());
@@ -94,6 +95,8 @@ void registerSimAutons() {
     // RW's list holds 12. These go last so the robot's autons keep their numbers.
     addAuton("Check: resets", checkResets);
     addAuton("Check: lift and claw", checkLiftAndClaw);
-    addAuton("Check: distance page", checkDistancePage);
+    // RW's list is full: the route lab takes the last place when a script is given.
+    if (std::getenv("ROUTE_SCRIPT")) addAuton("Lab", labRoute);
+    else addAuton("Check: distance page", checkDistancePage);
 }
 #endif

@@ -18,4 +18,6 @@ void runAuton();
 // finds autons by name in RW's own list, which the robot doesn't use, so this
 // copies ours into it, plus a few sim-only checks. In src/auton/sim_checks.cpp.
 void registerSimAutons();
+// Runs the route script named by the ROUTE_SCRIPT environment variable (the route lab in autonroutes.cpp).
+void labRoute();
 #endif

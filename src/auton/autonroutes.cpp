@@ -49,8 +49,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 #ifdef RW_SIM_PROS
 #include "rw/auton-selector.h"
+#include <cstdlib>
+#include <fstream>
+#include <map>
+#include <sstream>
+#include <string>
 #endif
 
 namespace {
@@ -180,8 +186,9 @@ constexpr double LIFT_NEAR_GRAB = 10;
 // With the robot's back against the wall at a toggle and holding the preload:
 // sets the pose (red coordinates), grips the preload, flips the toggle, starts
 // the lift up for the first goal, and rolls off the wall into the next move
-// (the toggle only counts once no robot touches it).
-void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_GOAL) {
+// (the toggle only counts once no robot touches it). rollOff false: the next
+// move is a curve that leaves the wall by itself.
+void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_GOAL, bool rollOff = true) {
     Pt f = at(centre);
     setPose(f.x, f.y, turned(heading));
     stepStart = pros::millis();
@@ -189,6 +196,7 @@ void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_G
     setToggle(blue);
     step("toggle");
     liftTo(firstLift);  // not during the flip: the ratchet motor drives both the winch and the flapper
+    if (!rollOff) return;
     driveTo(OFF_WALL, msFor(OFF_WALL), false);
     step("off the wall");
 }
@@ -323,6 +331,14 @@ void settle() {
     pros::delay(SETTLE_MS);
 }
 
+// A point on a curved leg (see "Curved moves" below): red coordinates, and the
+// top speed passing it as a fraction of TOP_IPS.
+struct Via {
+    double x, y;
+    double speed = 1;
+};
+double curve(const std::vector<Via>& pts, bool reverse, bool stop, double topIps);
+
 // Takes a Cup+Pin stack against a wall (red coordinates), the way the robot in
 // the overhead video does, fitted to V4. V4 (14.8 in long, corners 9.4-9.8 in
 // from its centre) can't turn to face the wall in the gap between the stack and
@@ -357,7 +373,10 @@ constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: 
 // stack gets the same shift mirrored. Set it if a stack ends off-centre the same
 // way every time. TODO: practice
 constexpr double WALL_AIM_SHIFT = 0;
-void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY) {
+// flow: the approach is one curve through `via`, then down the 45 degree line
+// to the wall, instead of stopping at the line-up point to turn.
+void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY,
+                   bool flow = false, std::vector<Via> via = {}) {
     double a = faceWall * M_PI / 180;
     Pt toWall{std::sin(a), std::cos(a)};
     Pt along{fromSide * std::cos(a), -fromSide * std::sin(a)};  // toward the side it comes from
@@ -381,16 +400,23 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     // Straight to the contact pose when already on the 45 degree line, else through the line-up point.
     double bearing = std::atan2(k.x - x_pos, k.y - y_pos) * 180 / M_PI;
     bool direct = std::fabs(std::remainder(bearing - turned(contactHeading), 360.0)) <= 6 && distanceTo(k) <= WALL_LINEUP + 8;
-    if (!direct) {
+    if (flow) {
+        via.push_back({lineup.x, lineup.y, 0.6});
+        via.push_back({past.x, past.y, 0.25});
+        curve(via, false, true, 45);
+        step("to the wall stack");
+    } else if (!direct) {
         aroundObstacles(l);
         aimIfNeeded(l, TURN_FIRST);
         moveToPoint(l.x, l.y, 1, msFor(distanceTo(l)), true);  // stops on the 45 degree line
         settle();  // still rolling ~16 in/s here, it coasted 1.8 in past the line-up point during the turn
         turnToAngle(turned(contactHeading), 700);  // and faces along it: the corner has to meet the wall where planned
     }
-    step(direct ? "to the wall stack (straight in)" : "to the wall stack");
-    aimIfNeeded(k, FINAL_AIM_DEG);  // the drive-in is straight: arriving 8 degrees off moved the claw ~2 in
-    moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
+    if (!flow) {
+        step(direct ? "to the wall stack (straight in)" : "to the wall stack");
+        aimIfNeeded(k, FINAL_AIM_DEG);  // the drive-in is straight: arriving 8 degrees off moved the claw ~2 in
+        moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
+    }
     step("corner on the wall");
     curveCircle(turned(faceWall), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // squares up, pressing the corner on the wall
     driveChassis(3, 3);  // a gentle push to seat the front on the wall
@@ -472,6 +498,128 @@ void score(Pt goal, double liftHeight, const char* name) {
     liftTo(LIFT_GRAB);
     step("release + back off");
     std::printf("Scored on %s\n", name);
+}
+
+// ---- Curved moves (RW's followPath) ---------------------------------------------
+// A leg is one smooth curve through a few points, driven with RW's pure pursuit
+// follower: it slows for bends by itself and each point can cap the speed there.
+// The robot doesn't stop to pick a piece up: the curve slows to GRAB_IPS through
+// the piece, the claw closes on the way (its sensor, or the robot's own position
+// as the backup), and the next curve carries on from that speed. It stops only
+// where it has to: on a goal, to let go of the piece, and at a wall stack.
+// RW's path follower needs the drive's feedforward measured on the real robot
+// (measureDriveFeedforward(), rw-config.cpp) before these speeds mean anything.
+constexpr double TOP_IPS = 45;       // top path speed, in/s (RW's default for this drive: 80% of free speed)
+constexpr double GRAB_IPS = 12;      // speed through a piece while the claw closes. TODO: practice
+constexpr double GRAB_SLOW = 4;      // already at GRAB_IPS this far before the piece
+constexpr double GRAB_LEAD = 1.5;    // the position backup closes the claw this far before the piece is at the claw point (about GRAB_IPS x CLAW_CLOSE_MS)
+constexpr double GRAB_ON = 1.0;      // keeps rolling this far past the piece's place while the claw closes
+constexpr double SCORE_SLOW = 8;     // the last stretch into a goal starts this far out...
+constexpr double SCORE_SLOW_SPEED = 0.45;  // ...at this fraction of TOP_IPS
+constexpr double SCORE_PAST = 0.5;   // aims this far past the stop: RW's follower stops up to 1 in short
+
+// Drives a smooth curve from where the robot is through `pts`. reverse: driving
+// backwards. stop: stops at the last point (otherwise it arrives rolling and the
+// next move must be another drive). Returns the curve's length.
+double curve(const std::vector<Via>& pts, bool reverse, bool stop, double topIps) {
+    std::vector<Waypoint> w;
+    w.emplace_back(x_pos, y_pos, 1.0);
+    for (const Via& v : pts) {
+        Pt f = at({v.x, v.y});
+        if (std::hypot(f.x - w.back().x, f.y - w.back().y) < 0.75) continue;  // on top of the last point
+        w.emplace_back(f.x, f.y, v.speed);
+    }
+    if (w.size() < 2) return 0;
+    Path path = pathFromPoints(w);
+    followPath(path, 1500 + path.length / 15 * 1000, reverse, stop, topIps);
+    return path.length;
+}
+
+// A top speed for a leg of `length` inches that gets there as the lift gets to
+// `liftTarget`: the robot slows down for the lift instead of stopping to wait.
+double topSpeedForLift(double length, double liftTarget, double near) {
+    double need = liftLeft(liftTarget, near) / LIFT_DPS;  // seconds the lift still needs
+    if (need <= 0.05) return TOP_IPS;
+    return std::clamp(1.2 * length / need, 10.0, TOP_IPS);  // a leg averages about 80% of its top speed
+}
+
+double legLength(Pt fromRed, const std::vector<Via>& pts) {
+    double total = 0;
+    Pt last = fromRed;
+    for (const Via& v : pts) {
+        total += std::hypot(v.x - last.x, v.y - last.y);
+        last = {v.x, v.y};
+    }
+    return total;
+}
+
+// Picks up a free-standing Cup+Pin (red coordinates) without stopping: a curve
+// through `via` that runs straight through the piece at GRAB_IPS, the claw
+// closing on the way. The piece is met coming from the last `via` point (or
+// from the robot, with none). Starts the lift up to `nextLift` once it has it.
+void take(Pt piece, const char* name, double nextLift, std::vector<Via> via = {}) {
+    clawRelease();
+    liftTo(LIFT_GRAB);
+    Pt here = at({x_pos, y_pos});  // red coordinates
+    Pt from = via.empty() ? here : Pt{via.back().x, via.back().y};
+    double d = std::max(std::hypot(piece.x - from.x, piece.y - from.y), 0.01);
+    Pt u{(piece.x - from.x) / d, (piece.y - from.y) / d};
+    double slow = GRAB_IPS / TOP_IPS;
+    via.push_back({piece.x - u.x * (REACH + GRAB_SLOW), piece.y - u.y * (REACH + GRAB_SLOW), slow});
+    via.push_back({piece.x - u.x * (REACH - GRAB_ON), piece.y - u.y * (REACH - GRAB_ON), slow});
+    Pt f = at(piece);
+    autograbArmNear(f.x, f.y, REACH + GRAB_LEAD);
+    // The lift has to be down before the claw gets there.
+    curve(via, false, false, topSpeedForLift(legLength(here, via), LIFT_GRAB, LIFT_NEAR_GRAB));
+    char how = autograbHow();
+    double when = how ? autograbWhenMs() / 1000.0 : pros::millis() / 1000.0;
+    clawGrab();  // close anyway, if neither trigger fired
+    autograbArm(false);
+    liftTo(nextLift);  // rises on the way to the goal
+    step("took it rolling");
+    std::printf("Grab %s: %s at %.2f s\n", name, how == 's' ? "sensor saw it" : how == 'o' ? "closed by position" : "closed at the end of the curve", when);
+}
+
+// Puts what the claw holds on a goal (red coordinates): a curve through `via`
+// that slows into the goal and stops with the claw over it, then lets go. The
+// goal is met coming from the last `via` point (or from the robot, with none).
+void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via = {}) {
+    liftTo(liftHeight);  // usually already on its way up
+    Pt here = at({x_pos, y_pos});
+    Pt from = via.empty() ? here : Pt{via.back().x, via.back().y};
+    double d = std::max(std::hypot(goal.x - from.x, goal.y - from.y), 0.01);
+    Pt u{(goal.x - from.x) / d, (goal.y - from.y) / d};
+    if (d > REACH + SCORE_SLOW + 2) {
+        via.push_back({goal.x - u.x * (REACH + SCORE_SLOW), goal.y - u.y * (REACH + SCORE_SLOW), SCORE_SLOW_SPEED});
+    }
+    via.push_back({goal.x - u.x * (REACH - SCORE_PAST), goal.y - u.y * (REACH - SCORE_PAST), SCORE_SLOW_SPEED});
+    curve(via, false, true, topSpeedForLift(legLength(here, via), liftHeight, LIFT_NEAR_SCORE));
+    if (liftLeft(liftHeight, LIFT_NEAR_SCORE) > 0) {
+        waitLiftNear(liftHeight, LIFT_NEAR_SCORE, 1500);
+        step("lift");
+    }
+    step("in");
+    clawRelease();
+    pros::delay(CLAW_OPEN_MS);
+    step("release");
+    std::printf("Scored on %s\n", name);
+}
+
+// Backs away from the goal it just scored on: `straight` inches straight back
+// (the claw's arms are around the goal), then a reverse curve through `then`,
+// which swings the nose toward the next piece. The lift comes down once the
+// claw is clear of the goal. Ends rolling: the next move must be a drive.
+void backAway(double straight, std::vector<Via> then = {}) {
+    double h = getInertialHeading() * M_PI / 180;
+    Pt f{x_pos - std::sin(h) * straight, y_pos - std::cos(h) * straight};
+    Pt r = at(f);  // red coordinates
+    curve({{r.x, r.y, then.empty() ? 0.3 : 1.0}}, true, false, TOP_IPS);
+    liftTo(LIFT_GRAB);
+    if (!then.empty()) {
+        then.back().speed = std::min(then.back().speed, 0.3);  // slow at the end: the next drive goes forwards
+        curve(then, true, false, TOP_IPS);
+    }
+    step("back away");
 }
 
 // ---- Routes (red) --------------------------------------------------------------
@@ -557,7 +705,136 @@ void asBlue() {
     blue = false;
 }
 
+#ifdef RW_SIM_PROS
+// ---- Route lab (simulator only) -----------------------------------------------
+// Runs a route written as a text script, so route shapes can be tried without
+// rebuilding: ROUTE_SCRIPT=file.txt sim/build/rw-sim "Lab" --start X,Y,H ...
+// One command per line, everything in red coordinates; each maps 1:1 onto the
+// helpers above, so a script that works is copied into a route function as is.
+//   start X Y HEADING [LIFT]            startAtToggle
+//   score GOAL LIFT [PT ...]            scoreOn through the points
+//   back INCHES [PT ...]                backAway
+//   take PIECE LIFT [PT ...]            take through the points
+//   wall STACK FACE SIDE LIFT [flow] [PT ...]   grabWallStack (flow: a curved approach through the points)
+//   curve [rev] [stop] PT ...           a plain curve
+//   gapback GOAL                        backOffToTurn: the slow back-off for between a goal and a wall
+//   face PT / turn HEADING              turn on the spot
+//   oldscore GOAL LIFT / oldtake PIECE LIFT   the stop-and-go helpers
+//   wait MS / lift LIFT / settle
+// PT is x,y or x,y,speed. GOAL: RG RGB BG or x,y. PIECE: YF YN ME or x,y.
+// STACK: W1 W2. LIFT: GRAB CARRY A0 A1 A2 N0 N1 or a number.
+bool labPoint(const std::string& t, Via& v) {
+    static const std::map<std::string, Pt> named = {
+        {"RG", RED_GOAL_LEFT}, {"RGB", RED_GOAL_BOTTOM}, {"BG", BLACK_GOAL_LEFT},
+        {"YF", DIAG_FAR}, {"YN", DIAG_NEAR}, {"ME", MID_EDGE},
+        {"W1", STACK_BY_RED_GOAL}, {"W2", STACK_BY_BLACK_GOAL}};
+    auto it = named.find(t);
+    if (it != named.end()) {
+        v = {it->second.x, it->second.y, 1};
+        return true;
+    }
+    double x = 0, y = 0, s = 1;
+    int n = std::sscanf(t.c_str(), "%lf,%lf,%lf", &x, &y, &s);
+    if (n < 2) return false;
+    v = {x, y, n == 3 ? s : 1};
+    return true;
+}
+
+double labLift(const std::string& t) {
+    static const std::map<std::string, double> named = {
+        {"GRAB", LIFT_GRAB}, {"CARRY", LIFT_CARRY},
+        {"A0", LIFT_ALLIANCE_GOAL}, {"A1", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE}, {"A2", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE},
+        {"N0", LIFT_NEUTRAL_GOAL}, {"N1", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE}};
+    auto it = named.find(t);
+    return it != named.end() ? it->second : std::atof(t.c_str());
+}
+
+const char* labName(const std::string& t) {
+    static std::map<std::string, std::string> names = {
+        {"RG", "alliance goal"}, {"RGB", "alliance goal"}, {"BG", "black goal"},
+        {"YF", "yellow Cup+Pin by the corner"}, {"YN", "yellow Cup+Pin by the Midfield"}, {"ME", "Cup+Pin at the Midfield's edge"},
+        {"W1", "wall stack by the alliance goal"}, {"W2", "wall stack by the black goal"}};
+    auto it = names.find(t);
+    if (it == names.end()) it = names.emplace(t, "thing at " + t).first;
+    return it->second.c_str();
+}
+
+void lab() {
+    const char* file = std::getenv("ROUTE_SCRIPT");
+    std::ifstream in(file ? file : "");
+    if (!in) {
+        std::printf("Lab: set ROUTE_SCRIPT to a route script\n");
+        return;
+    }
+    std::string line;
+    int number = 0;
+    while (std::getline(in, line)) {
+        number++;
+        std::istringstream words(line.substr(0, line.find('#')));
+        std::vector<std::string> t;
+        for (std::string word; words >> word;) t.push_back(word);
+        if (t.empty()) continue;
+        auto points = [&](size_t from) {
+            std::vector<Via> pts;
+            for (size_t i = from; i < t.size(); i++) {
+                Via v;
+                if (labPoint(t[i], v)) pts.push_back(v);
+                else std::printf("Lab line %d: '%s' is not a point\n", number, t[i].c_str());
+            }
+            return pts;
+        };
+        Via target;
+        const std::string& c = t[0];
+        if (c == "start" && t.size() >= 4) {
+            startAtToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), t.size() > 4 ? labLift(t[4]) : LIFT_ALLIANCE_GOAL, false);
+        } else if (c == "score" && t.size() >= 3 && labPoint(t[1], target)) {
+            scoreOn({target.x, target.y}, labLift(t[2]), labName(t[1]), points(3));
+        } else if (c == "oldscore" && t.size() >= 3 && labPoint(t[1], target)) {
+            score({target.x, target.y}, labLift(t[2]), labName(t[1]));
+        } else if (c == "take" && t.size() >= 3 && labPoint(t[1], target)) {
+            take({target.x, target.y}, labName(t[1]), labLift(t[2]), points(3));
+        } else if (c == "oldtake" && t.size() >= 3 && labPoint(t[1], target)) {
+            grab({target.x, target.y}, labName(t[1]), labLift(t[2]));
+        } else if (c == "back" && t.size() >= 2) {
+            backAway(std::atof(t[1].c_str()), points(2));
+        } else if (c == "wall" && t.size() >= 5 && labPoint(t[1], target)) {
+            bool flow = t.size() > 5 && t[5] == "flow";
+            grabWallStack({target.x, target.y}, std::atof(t[2].c_str()), std::atoi(t[3].c_str()), labName(t[1]), labLift(t[4]), flow, points(flow ? 6 : 5));
+        } else if (c == "curve") {
+            size_t i = 1;
+            bool rev = false, stop = false;
+            for (; i < t.size() && (t[i] == "rev" || t[i] == "stop"); i++) (t[i] == "rev" ? rev : stop) = true;
+            curve(points(i), rev, stop, TOP_IPS);
+            step("curve");
+        } else if (c == "gapback" && t.size() >= 2 && labPoint(t[1], target)) {
+            backOffToTurn(at({target.x, target.y}));
+            liftTo(LIFT_GRAB);
+            step("back off (gap)");
+        } else if (c == "face" && t.size() >= 2 && labPoint(t[1], target)) {
+            turnOnSpotNext = false;
+            aimAt(at({target.x, target.y}));
+            step("turn");
+        } else if (c == "turn" && t.size() >= 2) {
+            turnToAngle(turned(std::atof(t[1].c_str())), 900);
+            step("turn");
+        } else if (c == "wait" && t.size() >= 2) {
+            pros::delay(std::atoi(t[1].c_str()));
+        } else if (c == "lift" && t.size() >= 2) {
+            liftTo(labLift(t[1]));
+        } else if (c == "settle") {
+            settle();
+        } else {
+            std::printf("Lab line %d: don't understand '%s'\n", number, line.c_str());
+        }
+    }
+}
+#endif
+
 }  // namespace
+
+#ifdef RW_SIM_PROS
+void labRoute() { lab(); }
+#endif
 
 // The brain screen's selector lists these in order; runAuton() runs the one picked.
 // The number in a name is how many pins that auton puts on goals.
