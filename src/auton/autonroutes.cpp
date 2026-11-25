@@ -11,6 +11,9 @@
 
 #include "autons.hpp"
 #include "drivetrain.hpp"
+#ifdef RW_SIM_PROS
+#include "rw/auton-selector.h"
+#endif
 
 static void none() {}
 
@@ -151,5 +154,10 @@ void runAuton() {
     // Hold so the robot stops dead at the end of each move instead of rolling on.
     stopChassis(pros::MotorBrake::hold);
     setPose(0, 0, 0);  // autons can override this
+#ifdef RW_SIM_PROS
+    // In the simulator, RW's auton list picks (see registerSimAutons() in sim_checks.cpp).
+    runSelectedAuton();
+#else
     autons[selectedAuton].run();
+#endif
 }

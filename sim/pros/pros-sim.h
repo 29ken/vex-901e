@@ -334,6 +334,7 @@ class MotorGroup {
     return velocities;
   }
   double get_temperature(uint8_t index = 0) const { (void)index; return 30; }
+  std::vector<double> get_temperature_all() const { return std::vector<double>(ports_.size(), 30); }  // 901E: our temperature screen uses it
   int32_t get_current_draw(uint8_t index = 0) const { (void)index; return 500; }
   int32_t get_voltage(uint8_t index = 0) const { (void)index; return 12000; }
   int32_t is_over_temp(uint8_t index = 0) const { (void)index; return 0; }
