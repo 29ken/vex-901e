@@ -1,160 +1,187 @@
-# 901E to-do (V4 robot)
+# 901E practice plan (V4 robot)
 
-Branch `v4-cad-fixes`. Tick things off as they're done. "Paste into" says
-which line of code each measured number replaces.
+Branch `v4-cad-fixes` (local, not pushed). Work down the page in order: each
+step needs the ones before it. "Paste into" says which line of code a measured
+number replaces. Re-upload after each block of pasted numbers.
 
-## Before practice: code still to write (no robot needed)
+Everything below was only ever run in the simulator. Expect the first real
+runs to be off, and tune from there.
 
-- [ ] Port finder page on the brain screen: lists what's plugged into every
-      port, so ports can be picked at practice and typed straight into the code.
-- [ ] Test autons in the selector: square test, 48 in straight there-and-back,
-      turn test, curve tests at 3 speeds, wall-reset test, "Drive Calibration"
-      (records the log that makes the simulator drive like our robot).
-- [ ] Toggle / ratchet / optical code with every port, direction and angle as
-      a blank to fill in at practice, plus a safe test mode.
-      (`setToggle()` in `src/sub/toggle.cpp` only waits for now.)
-- [ ] Log every auton run to the SD card (position, sensor readings, resets).
-- [ ] Fix the old failing lift test (`test/lift_check.cpp:109`).
-- [ ] Fix the routes' scoring (see "Autons" below).
+## 0. Before you leave for practice
 
-## Before practice: team decisions
+- [ ] Bring: this Mac with the branch, a tape measure, an SD card in the brain,
+      masking tape for marking where the robot stops.
+- [ ] Decide how the code gets onto the robot (this Mac, or push the branch).
+- [ ] Not written yet (tell Claude if you want them before practice):
+      - the toggle / ratchet / optical code. `setToggle()` in
+        `src/sub/toggle.cpp` only waits 0.6 s, so **no auton flips a toggle yet**;
+      - a brain-screen page that lists what is plugged into each port;
+      - logging auton runs to the SD card.
 
-- [ ] How does V4 pick up the Cup+Pin stacks against the walls? A goal sits
-      21.6 in in front of each one; the robot needs 19.6 in to spin and the gap
-      is 17.2 in. Best path found leaves ~0.5 in on each side.
-- [ ] Where do the pieces start? The manual only shows it in its field drawing.
-      A photo or screenshot of that figure is enough.
-- [ ] Which AWP rules our events use (v1.1: 7 pins, 3 goals with 2+ pins each,
-      nobody touching the wall; Worlds-qualifying events changed it).
-- [ ] Driver buttons for the ratchet / winch / toggle.
-- [ ] Getting the code onto the robot: bring this Mac, or OK pushing a branch.
+## 1. Ports and a first check (15 min)
 
-## At practice, in this order
+- [ ] Plug everything in and fill in the port numbers:
+      - `src/rw-config.cpp`: drive motors, IMU (port 11 is a guess), the four
+        distance sensors.
+      - `include/config.hpp`: lift motors, lift sensor, `CLAW_PORT`,
+        `AUTOGRAB_SENSOR`.
+      - Write down the ratchet motor, toggle rotation sensor and optical sensor
+        ports (their code isn't written).
+- [ ] Check: the controller says MOTORS 6/6 OK. Push the robot by hand: X, Y
+      and H on the brain screen change the right way.
 
-1. **Ports.** Plug everything in and fill in the numbers:
-   - `src/rw-config.cpp`: drive motors, IMU (port 11 is a guess), the four
-     distance sensors.
-   - `include/config.hpp`: lift motors and lift sensor, claw (`CLAW_PORT`),
-     autograb sensor (`AUTOGRAB_SENSOR`).
-   - Ratchet motor, toggle rotation sensor, optical sensor: write them down
-     (code still to come).
-   - Check: the controller says MOTORS 6/6 OK; X, Y and H on the brain screen
-     change the right way when you push the robot.
-2. **Cal turn** (controller: X for the menu, UP to step through it, A to start):
-   spin the robot exactly 360 degrees, press A. Paste into `rw-config.cpp`:
-   `imu_scale`.
-3. **Cal dist**: push the robot exactly 48 in, press A. Paste into
-   `rw-config.cpp`: `wheel_distance_in`.
-4. **Turn PID**, then **Move PID** (driver control enabled, room to move).
-   Paste the P/I/D shown on the brain screen into `rw-config.cpp`.
-5. **Distance sensors** (brain screen, middle button = Distance page):
-   - Each sensor: park its lens a tape-measured distance from a wall (set the
-     distance with left/right), robot square to the wall, wait 2 s. Paste its
-     "x" number into `include/resets.hpp`: `SCALE_FRONT` / `BACK` / `LEFT` /
-     `RIGHT` (the terminal prints the line ready to paste).
-   - Offsets: put the robot at a known spot (back against a wall, tape the
-     other distance) and check the page's x/y matches. If not, the offsets in
-     `rw-config.cpp` are off.
-   - Clear walls (if the field has them): sensor 6, 12, 24, 36 in from the wall
-     at 0, 10, 20 and 30 degrees off square. Write down where readings go wrong
-     and set `RESET_MAX_OFF_SQUARE_DEG` in `resets.hpp` (12 now).
-   - Front sensor vs the claw: with a pin in the claw, raise the lift until the
-     front reading stops seeing the pin. Paste the "Lift" number into
-     `RESET_FRONT_CLEAR_LIFT`.
-6. **Lift heights** (raise by hand with R2, read "Lift" on the brain screen).
-   Paste into `include/config.hpp`: `LIFT_GRAB`, `LIFT_CARRY`,
-   `LIFT_ALLIANCE_GOAL`, `LIFT_NEUTRAL_GOAL`, `LIFT_PER_PIECE`, `LIFT_PRESETS`.
-7. **Ratchet and toggle**: which way the ratchet motor winds the winch and which
-   way it only turns the flapper; the flapper's rotation-sensor angles for
-   "down" and "flipped"; how long a flip takes (`TOGGLE_FLIP_MS`); the optical
-   sensor's hue on the red, blue and yellow faces.
-8. **Field checks**:
-   - Start position: robot's back against the wall at the toggle. Does the
-     flapper touch the toggle? (Not allowed at the start, <SG1>.)
-   - Tape-measure the wall-stack line: wall face to the goal's edge (RW's model
-     says 20.4 in).
-   - Have the driver try the wall-stack move: drive down along the wall, spin
-     to face it on the stack's line, drive in.
-9. **Drive Calibration** auton (once it exists), then on this Mac:
-   `sh sim/fit-profile.sh rw_drive_log.csv` so the simulator matches the robot.
-10. **Routes**, slow first:
-    - Does the claw land on the goal? Adjust `REACH` (6.25) in
-      `src/auton/autonroutes.cpp`.
-    - Does the piece drop (`CLAW_OPEN_MS`), and does the robot clear the goal
-      backing off (`BACK_OFF`)?
-    - Time each route; the terminal prints each step's time.
+## 2. Drive calibration (30 min). Do all of it before any auton
 
-## Making the curved autons (Red Left 4/5) match the simulator
+Controller menu: X opens it, UP steps through it, A starts.
 
-In this order at practice:
-1. `Cal dist`, then `Cal turn` (controller menu).
-2. Pick the auton `Cal: feedforward`, with 4 ft clear in front and behind. Copy
-   the three numbers from the brain into `drive_kS`, `drive_kV`, `drive_kA` in
-   `src/rw-config.cpp`. RW's curve follower needs these.
-3. Pick the auton `Cal: drive log`, with 4 ft clear all round (about 15 s).
-   Then on the computer: `sh sim/fit-profile.sh rw_drive_log.csv`, so the
-   simulator drives like our robot, and re-run the route search.
-4. Measure the lift (real heights per goal and stack level, and its speed:
-   `LIFT_*` in config.hpp, `LIFT_DPS` in autonroutes.cpp) and the claw
-   (`CLAW_OPEN_MS`, `CLAW_CLOSE_MS`, `AUTOGRAB_MM`).
-5. Measure where the loose Cup+Pins really sit (the code has them from a video, +-3 in).
-6. Run Red Left 4 with speeds capped low, several times. Same spot but off:
-   shift the points. Scattered: cap the curve's speed.
+- [ ] **Cal turn**: spin the robot exactly 360 degrees by hand, press A.
+      Paste into `rw-config.cpp`: `imu_scale`.
+- [ ] **Cal dist**: push the robot exactly 48 in, press A.
+      Paste into `rw-config.cpp`: `wheel_distance_in`.
+- [ ] **Turn PID**, then **Move PID** (driver control enabled, room to move).
+      Paste the P/I/D from the brain screen into `rw-config.cpp`.
+- [ ] Auton **`Cal: feedforward`** (auton picker), 4 ft clear in front and
+      behind. Copy the three numbers from the brain into `drive_kS`,
+      `drive_kV`, `drive_kA` in `rw-config.cpp`. It never ends: stop the
+      program once the numbers show. If our brain pages cover them, read them
+      from the PROS terminal. **The curved autons (Red Left 4/5) will not drive
+      properly without this.**
+- [ ] Auton **`Cal: drive log`**, 4 ft clear all round, about 15 s. Saves
+      `rw_drive_log.csv` to the SD card. On the Mac:
+      `sh sim/fit-profile.sh rw_drive_log.csv`. Keep the file: Claude re-runs
+      the route search against it so the simulator drives like our robot.
 
-## Autons: what's there and what's wrong
+## 3. Lift and claw (20 min)
 
-Auton time in RW's simulator (not yet fitted to our robot), run with V4's
-frame for wall contact (`--frame 7.14,7.64,6.14`). The overhead video's robot
-(youtube.com/shorts/VCsaetCuP-s) ran Red Left 4's 4 pins in 14.9 s. The lift
-speed is a guess (`LIFT_DPS`), so the lift waits in these times are too.
+- [ ] **Lift heights**: raise by hand with R2, read "Lift" on the brain screen.
+      Paste into `include/config.hpp`:
+      - `LIFT_GRAB`, `LIFT_CARRY`
+      - `LIFT_ALLIANCE_GOAL`: claw over an empty red goal
+      - `LIFT_NEUTRAL_GOAL`: claw over a black goal **with its starting yellow
+        pin on it** (every black goal starts with one)
+      - `LIFT_PER_PIECE`: how much higher for each piece already stacked
+      - `LIFT_PRESETS`
+- [ ] **Lift speed**: time the lift from the bottom to the third-piece height
+      and back down, with a piece in the claw. Paste units per second into
+      `LIFT_DPS` in `src/auton/autonroutes.cpp` (550 is a guess).
+- [ ] **Auton lift gain**: autons run the lift harder than the driver presets
+      (`LIFT_KP_AUTON` 2.0 in `include/lift.hpp`). Watch one auton lift move
+      with a piece: if it overshoots or bounces, lower it toward 0.5.
+- [ ] **Claw**: how long it takes to close on a Cup+Pin and to open
+      (`CLAW_CLOSE_MS`, `CLAW_OPEN_MS` in `autonroutes.cpp`, both 150), and the
+      distance at which the sensor sees a piece (`AUTOGRAB_MM` in `config.hpp`).
+- [ ] With the front of the robot flat on a wall and a wall stack in the claw,
+      does the claw still close on it and centre it? (The stack sits 0.66 in
+      deeper than usual there.)
 
-| Auton | Does | Sim time | Fits 15 s? |
-|---|---|---|---|
-| Red Left 3 / Blue Left 3 | toggle, preload → alliance goal, corner Cup+Pin → same goal, Midfield Cup+Pin → black goal | 13.2 s, 3 pins | yes |
-| Red Left 4 / Blue Left 4 | the video's route: preload + wall stack → alliance goal, other wall stack → black goal, Midfield Cup+Pin → alliance goal | 18.9 s; 4 pins with either wall, 3 of them by 15 s | no (video robot: 14.9 s) |
-| Red Left 5 / Blue Left 5 | Ken's labeler order: preload, wall stack, corner Cup+Pin → alliance goal; Midfield Cup+Pin, other wall stack → black goal | 23.9 s; 4 pins (gripping wall; the 5th lost to a simulator quirk) or 3 (sliding wall) | no |
-| Red Right 2 / Blue Right 2 | bottom toggle, preload → alliance goal, corner Cup+Pin → same goal | 8.7 s, 2 pins | yes |
-| Skills | Red Left 3 + the bottom toggle (rest not planned) | 17.5 s of 60 | |
+## 4. Distance sensors (20 min)
 
-- [ ] Loose Cup+Pin positions were measured off the video (about +-3 in):
-      check them on the field.
-- [ ] **Wall stacks don't fit V4 well (decide: CAD or route).** Every wall
-      stack sits right in front of a goal, 23.16 in from the wall to the goal's
-      centre. V4 is 14.8 in long with corners 9.42 in (front) and 9.8 in (back)
-      from its centre. Checked with V4's real outline:
-      - Turning in the gap to face the wall (10B's way): hits the goal and the
-        stack by ~1 in at the best spot. Not possible for V4.
-      - Curving in at a shallow angle: only with the robot brushing the goal.
-      - 45 degree entry, corner on the wall, square up (the overhead video's
-        way): clean (goal 5.6 in, stack 0.67 in), but how far the corner slides
-        along the wall while squaring depends on the wall's grip. In the
-        simulator: high grip, both stacks land in the claw; no grip, one misses
-        by 0.3 in.
-      - Leaving the gap after the grab: every way out turns on the spot 10.1 in
-        from the wall with 0.37 in to the goal and 0.39 in to the wall. In the
-        simulator, an inch of overshoot hit the goal or brushed the wall, and
-        with a high-grip wall that brush cost 5-6 in of position (why the
-        second wall stack misses).
-      - Fix with the most margin: the back corners. At 9.43 in from the centre
-        (back 0.5 in shorter, or ~0.6 in cut off each back corner) the turn in
-        the gap gets 0.75 in each side.
-- [ ] Wall-stack move at practice: does the corner hold while squaring
-      (`WALL_TURN_RADIUS`), and does a slide repeat (`WALL_AIM_SHIFT`)? With the
-      front on the wall the stack sits 0.66 in deeper than `REACH`: check the
-      claw still closes on it, and that it centres the stack (the reset after
-      the grab assumes it does).
-- [ ] Red Left 4 is 18.9 s here, ~3.9 s over. Most of it is the wall stacks
-      (~3.5 s each including leaving the gap) and lift waits on a guessed lift speed.
-- [ ] A missed wall stack costs the rest of the route: the squaring curve slides
-      the robot sideways, which the drive encoders can't see (RW 5-7 in out just
-      before the reset). Only holding the stack tells it where it is along the wall,
-      and that reset assumes the stack is centred in the claw: a stack 1.4 in
-      off-centre left RW 1.4 in out and both loose Cup+Pins after it missed
-      (Red Left 5, sliding wall).
-- [ ] Simulator quirk: it never removes a piece the robot took, so a distance
-      sensor can read a wall stack that's already in the claw (Red Left 5's last pin).
-- [ ] Scoring, the claw's U-opening has only 0.19 in to spare each side of a goal:
-      at 1.2 in off-centre its arm meets the goal ~1 in early (Red Left 3's black goal).
-- [ ] Resets rarely fire in Red Left 3: the robot reaches goals at 15-30 degrees
-      off square. Square up before resetting, or accept it.
-- [ ] Red Right 2 leaves ~6.3 s unused.
+Brain screen, middle button = Distance page.
+
+- [ ] Each sensor: park its lens a tape-measured distance from a wall (set the
+      distance with left/right), robot square to the wall, wait 2 s. Paste its
+      "x" number into `include/resets.hpp`: `SCALE_FRONT` / `BACK` / `LEFT` /
+      `RIGHT` (the terminal prints the line ready to paste).
+- [ ] Offsets: put the robot at a known spot and check the page's x/y. If it
+      is off, the sensor offsets in `rw-config.cpp` are wrong.
+- [ ] If the field has clear walls: try each sensor at 6, 12, 24, 36 in and at
+      0, 10, 20, 30 degrees off square. Note where readings go wrong and set
+      `RESET_MAX_OFF_SQUARE_DEG` in `resets.hpp` (12 now).
+
+## 5. Field measurements (15 min)
+
+- [ ] **Loose Cup+Pins**: tape-measure where each one sits from the two nearest
+      walls. The code has them from a video, good to about 3 in, and the claw
+      only takes 1.4 in. Paste into `autonroutes.cpp`: `DIAG_FAR`, `DIAG_NEAR`,
+      `MID_EDGE`, `MID_BOTTOM` (inches from the field centre; the walls are at
+      70.25).
+- [ ] **Wall stacks**: wall face to the centre of the stack (`STACK_FROM_WALL`,
+      1.55) and wall face to the edge of the goal in front of it (the code
+      assumes 20.4 in).
+- [ ] **Start position**: back of the robot on the wall at the toggle. The
+      flapper must not touch the toggle at the start (<SG1>).
+- [ ] Which way up are the cups in the wall stacks and loose Cup+Pins (gray
+      half up or clear half up)? The scoring count assumes gray up.
+- [ ] How long does a real toggle flip take? Paste into `TOGGLE_FLIP_MS` in
+      `include/toggle.hpp` (600 is a guess). The solo AWP route needs this.
+
+## 6. Run the autons, slowest and simplest first
+
+For each: run it 3-5 times, mark where the robot stops with tape, and read the
+terminal (it prints each step's time and what the claw sensor saw).
+
+- [ ] **Red Right 2** (2 pieces, sim 8.4 s) and **Red Left 3** (3 pieces, sim
+      12.4 s). Straight moves with turns: the easiest check that calibration is
+      good. Does the claw land on the goal (`REACH`, 6.25)? Does the piece drop
+      and the robot clear the goal backing off (`BACK_OFF`)?
+- [ ] **Red Left 4** (4 pieces, sim: all on by 14.2 s). Curved, with two wall
+      stacks. First with `TOP_IPS` lowered from 45 to about 25 in
+      `autonroutes.cpp`. Then raise it in steps until grabs stop landing every
+      time, and back off one step.
+      - Loose piece missed the same way every run: shift that leg's points.
+      - Scattered: that curve is too fast; lower the speed number on its points.
+      - Wall stack off-centre the same way every run: set `WALL_AIM_SHIFT`.
+      - The corner doesn't hold while squaring up: change `WALL_TURN_RADIUS`.
+      - The spin after a wall stack touches the goal or the wall: that is the
+        0.3-0.4 in gap (see "Known limits").
+- [ ] **Red Left 5** (5 pieces, sim: fifth on at 15.6 s, so 4 count). Same
+      tuning as Red Left 4. It has several aim points corrected by up to
+      0.7 in in the simulator: expect to re-do those.
+- [ ] Blue versions: the same routes turned 180 degrees. Check one.
+- [ ] **Watch log**: every auton prints `Watch ...` lines (what the distance
+      sensors think the position error is). It changes nothing. Save the
+      terminal output of a few runs for Claude: it decides whether sensor
+      corrections can be switched on.
+
+## 7. Bring back
+
+- [ ] Every number you pasted (or just commit the files).
+- [ ] `rw_drive_log.csv`.
+- [ ] Terminal output of the auton runs, and where each run ended versus where
+      it should have.
+- [ ] A video of one wall-stack grab from above, if you can.
+
+## Autons in the code (simulator numbers)
+
+| Auton | Pieces placed | Sim result |
+|---|---|---|
+| Red/Blue Left 3 | preload, corner Cup+Pin → red goal; Midfield Cup+Pin → black goal | 3 placed, ends 12.4 s |
+| Red/Blue Left 4 | preload, wall stack → red goal; other wall stack → black goal; Midfield Cup+Pin → red goal | 4 placed by 14.2 s (20 of 20 runs) |
+| Red/Blue Left 5 | preload, wall stack, corner Cup+Pin → red goal; Midfield Cup+Pin, other wall stack → black goal | 5 placed, the fifth at 15.6 s (20 of 20 runs) |
+| Red/Blue Right 2 | bottom toggle, preload, corner Cup+Pin → bottom red goal | 2 placed, ends 8.4 s |
+| Skills | Red Left 3, then the bottom toggle | 16.7 s of 60; the rest isn't planned |
+| `Cal: feedforward`, `Cal: drive log` | set-up runs, not match autons | |
+
+"Placed" is pieces, not points: a Scored Pin is a visible pin half. Each black
+goal starts with a yellow pin; yellow halves count only when that quadrant's
+toggle is ours.
+
+## Not done yet
+
+- [ ] **Solo AWP** (Worlds-qualifying: 7 halves, 3 goals with 2+, both toggles,
+      off the wall). The best route found does it in 16.5 s, 1.5 s too long, and
+      is not in the robot code. It needs the real toggle flip time and claw
+      speed before it can be shortened.
+- [ ] **Red Left 5 under 15 s**: 0.6 s short. What is left is fixed time in the
+      wall-stack move.
+- [ ] Toggle / ratchet / optical code (step 0).
+- [ ] Sensor corrections while driving: the watcher only logs. MCL after that.
+- [ ] The old failing lift test (`test/lift_check.cpp:109`).
+
+## Known limits
+
+- **V4 is long for the gap beside a goal.** Every wall stack sits in front of a
+  goal. After a grab the robot spins 10.1 in from the wall with 0.3-0.4 in to
+  the goal and the wall. Back corners at 9.43 in from the centre instead of
+  9.8 (back 0.5 in shorter, or about 0.6 in cut off each back corner) would
+  give 0.75 in each side. That is a CAD decision.
+- **The wall-stack grab depends on the wall.** How the corner slides while
+  squaring up can't be simulated; the simulator's two wall models disagree by
+  almost 2 in. A missed wall stack costs the rest of that route.
+- **The claw's U-opening has 0.19 in to spare each side of a goal.** A score
+  that arrives off line puts an arm on the goal.
+- **No tracking wheels.** The robot can't see itself slide sideways in fast
+  bends. That error builds through each curve and is only corrected at wall
+  stacks.
+- **RW's curve follower is new** and, by RW's own notes, not tried on many
+  robots.
