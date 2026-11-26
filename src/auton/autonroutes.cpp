@@ -706,19 +706,43 @@ void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}) {
 constexpr double SIDE_FLAP_BEHIND = 6.75;
 Pt sideFlipWhere{0, 0};
 std::atomic<bool> sideFlipBusy{false};
+// ram: the curve is aimed a little into the wall, so the robot meets it at a
+// shallow angle and slides along it on its side sleds (the wall also turns it
+// parallel). When the flip starts and the robot is within 6 degrees of
+// parallel, its side is taken to be on the wall, which gives its distance
+// from that wall exactly (HALF_WIDTH). Keep the angle shallow (10-20 degrees):
+// at 30 in/s and 15 degrees only 8 in/s goes into the wall.
+bool sideFlipRam = false;
 void sideFlipTask(void*) {
     std::uint32_t began = pros::millis();
     while (distanceTo(sideFlipWhere) > 3 && pros::millis() - began < 6000) pros::delay(10);
+    if (sideFlipRam) {
+        double h = getInertialHeading();
+        bool alongX = std::fabs(std::remainder(h - 90, 180.0)) <= 6;   // heading east or west: beside the bottom or top wall
+        bool alongY = std::fabs(std::remainder(h, 180.0)) <= 6;        // heading north or south: beside the left or right wall
+        if (alongX && std::fabs(y_pos) > WALL - HALF_WIDTH - 4) {
+            double y = std::copysign(WALL - HALF_WIDTH, y_pos);
+            std::printf("Side on the wall: y %.2f -> %.2f\n", y_pos, y);
+            setPose(x_pos, y, h);
+        } else if (alongY && std::fabs(x_pos) > WALL - HALF_WIDTH - 4) {
+            double x = std::copysign(WALL - HALF_WIDTH, x_pos);
+            std::printf("Side on the wall: x %.2f -> %.2f\n", x_pos, x);
+            setPose(x, y_pos, h);
+        } else {
+            std::printf("Side on the wall: not parallel or not near it (heading %.1f), no reset\n", h);
+        }
+    }
     setToggle(blue);
     step("toggle");
     sideFlipBusy = false;
 }
-void sideToggle(Pt where, const std::vector<Via>& pts) {
+void sideToggle(Pt where, const std::vector<Via>& pts, bool ram = false) {
     sideFlipWhere = at(where);
+    sideFlipRam = ram;
     sideFlipBusy = true;
     pros::Task flip(sideFlipTask, nullptr, "Side toggle");
     curve(pts, false, false, TOP_IPS);
-    step("along the toggle");
+    step(ram ? "along the toggle (on the wall)" : "along the toggle");
 }
 
 // Turns on the spot to face a point (red coordinates). Only from a stop.
@@ -893,7 +917,8 @@ void asBlue() {
 //   face PT / turn HEADING              turn on the spot
 //   oldscore GOAL LIFT / oldtake PIECE LIFT   the stop-and-go helpers
 //   toggle X Y HEADING [PT ...]         flipToggleAt: a second toggle (bottom: toggle -6 -62.61 0)
-//   sidetoggle X Y PT ...               sideToggle: flips side-on, starting when the centre is within 3 in of X,Y
+//   sidetoggle X Y [ram] PT ...         sideToggle (ram: slides along the wall on purpose)
+//   (old form) sidetoggle X Y PT ...    sideToggle: flips side-on, starting when the centre is within 3 in of X,Y
 //   wait MS / lift LIFT / settle
 // PT is x,y or x,y,speed. GOAL: RG RGB BG or x,y. PIECE: YF YN ME or x,y.
 // STACK: W1 W2. LIFT: GRAB CARRY A0 A1 A2 N0 N1 or a number.
@@ -995,7 +1020,8 @@ void lab() {
         } else if (c == "toggle" && t.size() >= 4) {
             flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(4));
         } else if (c == "sidetoggle" && t.size() >= 4) {
-            sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(3));
+            bool ram = t.size() > 3 && t[3] == "ram";
+            sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(ram ? 4 : 3), ram);
         } else if (c == "settle") {
             settle();
         } else {
