@@ -137,7 +137,7 @@ terminal (it prints each step's time and what the claw sensor saw).
       12.4 s). Straight moves with turns: the easiest check that calibration is
       good. Does the claw land on the goal (`REACH`, 6.25)? Does the piece drop
       and the robot clear the goal backing off (`BACK_OFF`)?
-- [ ] **Red Left 4** (4 pieces, sim: all on by 14.2 s). Curved, with two wall
+- [ ] **Red Left 4** (4 pieces, sim: all on by 13.4 s). Curved, with two wall
       stacks. First with `TOP_IPS` lowered from 45 to about 25 in
       `autonroutes.cpp`. Then raise it in steps until grabs stop landing every
       time, and back off one step.
@@ -147,7 +147,7 @@ terminal (it prints each step's time and what the claw sensor saw).
       - The corner doesn't hold while squaring up: change `WALL_TURN_RADIUS`.
       - The spin after a wall stack touches the goal or the wall: that is the
         0.3-0.4 in gap (see "Known limits").
-- [ ] **Red Left 5** (5 pieces, sim: fifth on at 15.6 s, so 4 count). Same
+- [ ] **Red Left 5** (5 pieces, sim: all on by 14.6 s, ends 14.7 s). Same
       tuning as Red Left 4. It has several aim points corrected by up to
       0.7 in in the simulator: expect to re-do those.
 - [ ] **Red Solo AWP**: run it after Red Left 4 works. Time the bottom-toggle
@@ -171,8 +171,8 @@ terminal (it prints each step's time and what the claw sensor saw).
 | Auton | Pieces placed | Sim result |
 |---|---|---|
 | Red/Blue Left 3 | preload, corner Cup+Pin → red goal; Midfield Cup+Pin → black goal | 3 placed, ends 12.4 s |
-| Red/Blue Left 4 | preload, wall stack → red goal; other wall stack → black goal; Midfield Cup+Pin → red goal | 4 placed by 14.2 s (20 of 20 runs) |
-| Red/Blue Left 5 | preload, wall stack, corner Cup+Pin → red goal; Midfield Cup+Pin, other wall stack → black goal | 5 placed, the fifth at 15.6 s (20 of 20 runs) |
+| Red/Blue Left 4 | preload, wall stack → red goal; other wall stack → black goal; Midfield Cup+Pin → red goal | 4 placed by 13.4 s (20 of 20 runs) |
+| Red/Blue Left 5 | preload, wall stack, corner Cup+Pin → red goal; Midfield Cup+Pin, other wall stack → black goal | 5 placed by 14.6 s, ends 14.7 s (20 of 20 runs) |
 | Red/Blue Right 2 | bottom toggle, preload, corner Cup+Pin → bottom red goal | 2 placed, ends 8.4 s |
 | Skills | Red Left 3, then the bottom toggle | 16.7 s of 60; the rest isn't planned |
 | Red/Blue Solo AWP | preload, Midfield-edge Cup+Pin → left black goal; Midfield Cup+Pin → red goal; bottom-edge Cup+Pin → bottom black goal; bottom toggle side-on; corner Cup+Pin → red goal | ends 16.2 s; at 15 s both toggles, 3 goals with 2+, 6 of 7 halves: the AWP is not met |
@@ -194,8 +194,17 @@ toggle is ours.
         Can it flip while rolling? How long does the flip take?
       - The pass along the wall has ~0.3 in of room and nothing corrects the
         robot's position there: it needs a distance-sensor reset before it.
-- [ ] **Red Left 5 under 15 s**: 0.6 s short. What is left is fixed time in the
-      wall-stack move.
+- [x] **Red Left 5 under 15 s** in the simulator (ends 14.7 s). The margin is
+      0.3 s and depends on the real lift, claw and toggle times.
+- [ ] **Goal-seat reset** (new, never run on the robot): every score presses
+      lightly onto the goal while the claw opens, then sets the robot's
+      position from the goal. At practice: watch that the robot really ends
+      pressed onto the goal, and measure how far the goal's centre is ahead of
+      the robot's centre when seated (`GOAL_SEAT` in `autonroutes.cpp`, 6.0 is
+      from the CAD). The terminal prints "Goal seat: ..." each time.
+- [ ] **Wall stacks** now grab as soon as the robot is within 3 degrees of
+      square (`WALL_SQUARE_EXIT_DEG`), with no push (`WALL_PUSH_MS` 0). If the
+      claw closes before the stack is in, raise the push to 80.
 - [ ] Toggle / ratchet / optical code is written but has never run on the
       robot (ports are 0). `RATCHET_ASSIST` (ratchet motor helps the lift up) is
       off until the hand check passes.

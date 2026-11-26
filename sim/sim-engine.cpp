@@ -290,6 +290,44 @@ void physicsStep(double dt) {
   }
   new_x = std::max(lo_x, std::min(hi_x, new_x));
   new_y = std::max(lo_y, std::min(hi_y, new_y));
+  if (robot.frame_front_in > 0 && robot.u_half_in > 0 && world.override_field) {
+    // A goal in the front U-opening is solid. The arms' inner faces push the robot sideways
+    // (omni rollers) until the goal is between them, the arms' front ends stop it if the goal is
+    // outside the opening, and the back of the opening stops it once the goal is seated. The
+    // wheels keep turning against it (encoders keep counting), as at a wall.
+    double h = true_heading + w * dt;
+    double fx = std::sin(h), fy = std::cos(h), rx = std::cos(h), ry = -std::sin(h);  // forward and right, field coordinates
+    double F = robot.frame_front_in, H = robot.u_half_in, W = robot.frame_half_width_in;
+    for (int k = 0; k < 9 && k < (int)circles.size(); k++) {   // the nine goals come first in `circles`
+      const Circle& g = circles[k];
+      for (int pass = 0; pass < 2; pass++) {
+        double ox = g.x - new_x, oy = g.y - new_y;
+        double lx = ox * rx + oy * ry, ly = ox * fx + oy * fy;   // the goal, in the robot's frame
+        if (ly < robot.u_back_in - g.r || ly > F + g.r || std::fabs(lx) > W + g.r) break;
+        double side = 0, back = 0;
+        if (std::fabs(lx) < H) {
+          if (ly <= F) {
+            if (std::fabs(lx) > H - g.r) side = std::copysign(std::fabs(lx) - std::max(0.0, H - g.r), lx);   // between the arms
+            if (ly < robot.u_seat_in) back = robot.u_seat_in - ly;                                             // seated
+          } else {
+            // ahead of the arms' ends: their inner corners funnel it in
+            double reach = std::sqrt(std::max(0.0, g.r * g.r - (ly - F) * (ly - F)));
+            if (H - std::fabs(lx) < reach) side = std::copysign(reach - (H - std::fabs(lx)), lx);
+          }
+        } else if (ly >= F) {
+          // onto an arm's front end (a flat edge from H to W across): the nearest point of that edge
+          double ex = std::fabs(lx) - std::min(std::fabs(lx), W);   // how far outside the arm's outer corner
+          if (ex < g.r) {
+            double reach = std::sqrt(g.r * g.r - ex * ex);
+            if (ly - F < reach) back = reach - (ly - F);
+          }
+        }
+        if (side == 0 && back == 0) break;
+        new_x += side * rx - back * fx;
+        new_y += side * ry - back * fy;
+      }
+    }
+  }
   dx = new_x - true_x;
   dy = new_y - true_y;
   true_x = new_x;

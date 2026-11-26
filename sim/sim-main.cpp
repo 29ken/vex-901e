@@ -62,6 +62,7 @@ struct Options {
   double robot_size = 15;
   double frame_front = 0, frame_back = 0, frame_half = 0;
   bool wall_stick = false;
+  double u_half = 0, u_back = 0, u_seat = 0;
   bool list = false;
 };
 
@@ -76,6 +77,9 @@ void usage() {
     "  --size INCHES          Robot size for wall collisions (default 15)\n"
     "  --frame F,B,W          Frame as a rectangle for wall collisions instead: front, back, half width\n"
     "  --wall slide|stick     With --frame: a corner on a wall slides along it (default) or stays put\n"
+    "  --goal-seat H,B,S      With --frame: goals are solid to a front U-opening (inner half width H,\n"
+    "                         arms from B ahead of the centre to the frame's front); a goal in the U\n"
+    "                         slides the robot sideways to centre on it and stops it S from the centre\n"
     "  --seed N               Random seed for slip and noise\n"
     "  --profile FILE         Robot profile from fit-profile (default sim/robot-profile.txt if it exists)\n"
     "  --no-profile           Ignore the robot profile and use the default robot\n"
@@ -104,6 +108,12 @@ Options parse(int argc, char** argv) {
     else if (arg == "--frame") {
       if (std::sscanf(next("--frame"), "%lf,%lf,%lf", &opt.frame_front, &opt.frame_back, &opt.frame_half) != 3) {
         std::fprintf(stderr, "--frame wants front,back,half width\n");
+        std::exit(2);
+      }
+    }
+    else if (arg == "--goal-seat") {
+      if (std::sscanf(next("--goal-seat"), "%lf,%lf,%lf", &opt.u_half, &opt.u_back, &opt.u_seat) != 3) {
+        std::fprintf(stderr, "--goal-seat wants the U's inner half width, where its arms start, and the seated goal's distance ahead\n");
         std::exit(2);
       }
     }
@@ -142,6 +152,9 @@ int main(int argc, char** argv) {
   robot.frame_back_in = opt.frame_back;
   robot.frame_half_width_in = opt.frame_half;
   robot.wall_stick = opt.wall_stick;
+  robot.u_half_in = opt.u_half;
+  robot.u_back_in = opt.u_back;
+  robot.u_seat_in = opt.u_seat;
   if (using_horizontal_tracker) {
     robot.horizontal_tracker_port = horizontal_tracker.index();
     robot.horizontal_offset_in = horizontal_tracker_dist_from_center;

@@ -22,6 +22,9 @@ namespace rwsim {
     // The frame as a rectangle for wall collisions (inches from the centre); 0 = the square robot_size_in.
     double frame_front_in = 0, frame_back_in = 0, frame_half_width_in = 0;
     bool wall_stick = false;  // with a frame: a corner pressed on a wall stays put (high friction) instead of sliding
+    // A U-shaped opening at the front that seats on a goal: inner half width, how far ahead of the
+    // centre its arms start, and how far ahead a seated goal's centre is. 0 = goals aren't solid.
+    double u_half_in = 0, u_back_in = 0, u_seat_in = 0;
     int32_t horizontal_tracker_port = -1, vertical_tracker_port = -1;
     double horizontal_offset_in = 0, vertical_offset_in = 0; // + = behind center / + = right of center
     double horizontal_diameter_in = 2, vertical_diameter_in = 2;
