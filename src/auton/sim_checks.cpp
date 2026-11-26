@@ -90,13 +90,13 @@ static void checkDistancePage() {
 }
 
 void registerSimAutons() {
-    // Leaves out "None" (index 0): RW's list holds 12, and ours plus the checks would be 13.
+    // RW's list holds 12 and finds autons by name. The route lab goes first so it
+    // always fits; the checks go last and the ones that don't fit are left out.
+    if (std::getenv("ROUTE_SCRIPT")) addAuton("Lab", labRoute);
+    // Leaves out "None" (index 0).
     for (int i = 1; i < autonCount; i++) addAuton(autons[i].name, autons[i].run);
-    // RW's list holds 12. These go last so the robot's autons keep their numbers.
     addAuton("Check: resets", checkResets);
     addAuton("Check: lift and claw", checkLiftAndClaw);
-    // RW's list is full: the route lab takes the last place when a script is given.
-    if (std::getenv("ROUTE_SCRIPT")) addAuton("Lab", labRoute);
-    else addAuton("Check: distance page", checkDistancePage);
+    addAuton("Check: distance page", checkDistancePage);
 }
 #endif

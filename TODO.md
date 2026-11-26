@@ -127,6 +127,8 @@ terminal (it prints each step's time and what the claw sensor saw).
 - [ ] **Red Left 5** (5 pieces, sim: fifth on at 15.6 s, so 4 count). Same
       tuning as Red Left 4. It has several aim points corrected by up to
       0.7 in in the simulator: expect to re-do those.
+- [ ] **Red Solo AWP**: run it after Red Left 4 works. Time the bottom-toggle
+      part on its own, and try the toggle side-on by hand to see what it needs.
 - [ ] Blue versions: the same routes turned 180 degrees. Check one.
 - [ ] **Watch log**: every auton prints `Watch ...` lines (what the distance
       sensors think the position error is). It changes nothing. Save the
@@ -150,6 +152,7 @@ terminal (it prints each step's time and what the claw sensor saw).
 | Red/Blue Left 5 | preload, wall stack, corner Cup+Pin → red goal; Midfield Cup+Pin, other wall stack → black goal | 5 placed, the fifth at 15.6 s (20 of 20 runs) |
 | Red/Blue Right 2 | bottom toggle, preload, corner Cup+Pin → bottom red goal | 2 placed, ends 8.4 s |
 | Skills | Red Left 3, then the bottom toggle | 16.7 s of 60; the rest isn't planned |
+| Red/Blue Solo AWP | preload, Midfield-edge Cup+Pin → left black goal; Midfield and corner Cup+Pins → red goal; bottom-edge Cup+Pin → bottom black goal; bottom toggle | 5 placed by 13.8 s; second toggle at 16.2 s, so the AWP is not met in 15 s |
 | `Cal: feedforward`, `Cal: drive log` | set-up runs, not match autons | |
 
 "Placed" is pieces, not points: a Scored Pin is a visible pin half. Each black
@@ -159,9 +162,13 @@ toggle is ours.
 ## Not done yet
 
 - [ ] **Solo AWP** (Worlds-qualifying: 7 halves, 3 goals with 2+, both toggles,
-      off the wall). The best route found does it in 16.5 s, 1.5 s too long, and
-      is not in the robot code. It needs the real toggle flip time and claw
-      speed before it can be shortened.
+      off the wall). `Red Solo AWP` / `Blue Solo AWP` are in the picker as
+      practice routes: all five pieces are down by 13.8 s, but the bottom toggle
+      flips at 16.2 s (ends 16.5 s), 1.5 s too long.
+      - Next to try: **flip the second toggle side-on** while driving along the
+        wall, instead of backing square into it (that back-in costs ~2.6 s).
+        Needs: which side of the robot does it, and how far from the wall.
+      - Also needs the real toggle flip time (`TOGGLE_FLIP_MS`).
 - [ ] **Red Left 5 under 15 s**: 0.6 s short. What is left is fixed time in the
       wall-stack move.
 - [ ] Toggle / ratchet / optical code (step 0).

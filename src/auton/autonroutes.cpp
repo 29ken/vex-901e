@@ -768,6 +768,37 @@ void redLeft5() {
 
 }
 
+// Solo Autonomous Win Point, Worlds-qualifying criteria: 7 visible pin halves,
+// 3 goals with 2 or more each, both of our toggles ours, off the wall at the end.
+// Each black goal starts with a yellow pin (1 half once its toggle is ours), so
+// the robot adds the preload and four loose Cup+Pins: red goal 3, left black
+// goal 2, bottom black goal 2. No wall stacks.
+// NOT IN TIME YET: in the simulator all five pieces are down by 13.8 s but the
+// bottom toggle flips at about 16.2 s (ends 16.5 s), so at 15 s it has 5 halves
+// on 2 goals. It is here to practise and tune. The square back-in at the bottom
+// toggle costs about 2.6 s: flipping it side-on while driving along the wall is
+// the next thing to try. Several aim points are corrected by 1-2.4 in for the
+// simulator's corner-cutting: re-measure them on the field.
+void redSoloAwp() {
+    startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
+    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});
+    backAway(4, {{-55, -10}});
+    take({-22.4, -3}, "Cup+Pin at the Midfield's edge", LIFT_NEUTRAL_GOAL, {{-36, -6}});
+    scoreOn({-45.5, 25.1}, LIFT_NEUTRAL_GOAL, "black goal", {{-31, 8}, {-35.8, 12.3}});
+    curve({{-40, 14}}, true, true, TOP_IPS);
+    turnToAngle(turned(168), 900);
+    take({-24.6, -25.5}, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, {{-27, -10}});
+    scoreOn({-48.3, -23.6}, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal", {{-26, -33}, {-34, -31}});
+    backAway(5, {{-32, -34}, {-29, -32}});
+    take({-46.56, -46.72}, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-40, -42}});
+    scoreOn({-49, -22}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-52, -54}, {-56, -42}, {-52, -36}});
+    backAway(4, {{-55, -34}, {-58, -36}});
+    take(MID_BOTTOM, "Cup+Pin at the Midfield's bottom edge", LIFT_NEUTRAL_GOAL, {{-36, -34}, {-16, -27}});
+    scoreOn({23.31, -45}, LIFT_NEUTRAL_GOAL, "bottom black goal", {{8, -34}});
+    backAway(4, {{0, -46}, {-6, -51.5}, {-6, -53.2}});
+    flipToggleAt({-6, -WALL + BACK}, 0);
+}
+
 // Bottom Quadrant: toggle, preload and the corner Cup+Pin on the red goal.
 void redRight() {
     startAtToggle({-6, -WALL + BACK}, 0);
@@ -953,10 +984,12 @@ const Auton autons[] = {
     {"Red Left 4", redLeft4},
     {"Red Left 5", redLeft5},
     {"Red Right 2", redRight},
+    {"Red Solo AWP", redSoloAwp},
     {"Blue Left 3", asBlue<redLeft>},
     {"Blue Left 4", asBlue<redLeft4>},
     {"Blue Left 5", asBlue<redLeft5>},
     {"Blue Right 2", asBlue<redRight>},
+    {"Blue Solo AWP", asBlue<redSoloAwp>},
     {"Skills", skills},
 #ifndef RW_SIM_PROS
     // Practice set-up runs, not match autons (the simulator's list has no room for them).
