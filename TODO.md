@@ -13,8 +13,6 @@ runs to be off, and tune from there.
       masking tape for marking where the robot stops.
 - [ ] Decide how the code gets onto the robot (this Mac, or push the branch).
 - [ ] Not written yet (tell Claude if you want them before practice):
-      - the toggle / ratchet / optical code. `setToggle()` in
-        `src/sub/toggle.cpp` only waits 0.6 s, so **no auton flips a toggle yet**;
       - a brain-screen page that lists what is plugged into each port;
       - logging auton runs to the SD card.
 
@@ -25,8 +23,24 @@ runs to be off, and tune from there.
         distance sensors.
       - `include/config.hpp`: lift motors, lift sensor, `CLAW_PORT`,
         `AUTOGRAB_SENSOR`.
-      - Write down the ratchet motor, toggle rotation sensor and optical sensor
-        ports (their code isn't written).
+      - `include/config.hpp`: `RATCHET_MOTOR`, `TOGGLE_SENSOR` (rotation sensor
+        on the toggle shaft), `TOGGLE_OPTICAL`. While `RATCHET_MOTOR` is 0 no
+        auton flips a toggle: `setToggle()` only waits 0.6 s.
+- [ ] **Ratchet check, robot off:** raise the lift by hand: the toggle flapper
+      should stay still (pawls clicking). Lower it by hand: the flapper should
+      turn. If it is the other way round, the pawls are on backwards for the
+      code.
+- [ ] **Ratchet check, robot on:** tap B. The flapper should turn half a turn
+      and the lift should NOT move. If the lift moves, make `RATCHET_MOTOR`
+      negative.
+- [ ] Turn the flapper by hand to where the flaps are clear of everything, read
+      "Toggle ... deg" on the brain screen, paste into `TOGGLE_REST_DEG` in
+      `include/toggle.hpp`.
+- [ ] Hold a red, a blue and a yellow toggle face where the optical sensor
+      looks: the brain screen should say red / blue / yellow. If it says "?",
+      tell Claude the colours it does and doesn't see.
+- [ ] Does one flip (half a turn of the flapper) flip a toggle back-on? And
+      side-on (the side flaps are single, so it may need a full turn)?
 - [ ] Check: the controller says MOTORS 6/6 OK. Push the robot by hand: X, Y
       and H on the brain screen change the right way.
 
@@ -102,8 +116,9 @@ Brain screen, middle button = Distance page.
       flapper must not touch the toggle at the start (<SG1>).
 - [ ] Which way up are the cups in the wall stacks and loose Cup+Pins (gray
       half up or clear half up)? The scoring count assumes gray up.
-- [ ] How long does a real toggle flip take? Paste into `TOGGLE_FLIP_MS` in
-      `include/toggle.hpp` (600 is a guess). The solo AWP route needs this.
+- [ ] How long does a real toggle flip take (B on the controller, time it)?
+      Paste into `TOGGLE_FLIP_MS` in `include/toggle.hpp` (600 is a guess; the
+      simulator uses it). The solo AWP route needs this.
 
 ## 6. Run the autons, slowest and simplest first
 
@@ -173,7 +188,9 @@ toggle is ours.
         robot's position there: it needs a distance-sensor reset before it.
 - [ ] **Red Left 5 under 15 s**: 0.6 s short. What is left is fixed time in the
       wall-stack move.
-- [ ] Toggle / ratchet / optical code (step 0).
+- [ ] Toggle / ratchet / optical code is written but has never run on the
+      robot (ports are 0). `RATCHET_ASSIST` (ratchet motor helps the lift up) is
+      off until the hand check passes.
 - [ ] Sensor corrections while driving: the watcher only logs. MCL after that.
 - [ ] The old failing lift test (`test/lift_check.cpp:109`).
 

@@ -15,7 +15,7 @@
 // Robot numbers are from the V4 CAD.
 //
 // What these routes can't do yet:
-//  - The toggle flapper isn't wired (see toggle.hpp): setToggle() only waits.
+//  - The ratchet motor has no port yet (see toggle.hpp): setToggle() only waits.
 //  - Every lift height is a placeholder (config.hpp) until practice.
 //  - The simulator can't show the wall-stack move properly: it has no robot
 //    squaring itself on a wall. It has to be proven on a field.

@@ -1,4 +1,5 @@
 #include "lift.hpp"
+#include "toggle.hpp"
 #include <cstdio>
 #include <mutex>
 
@@ -80,6 +81,7 @@ static void loop() {
             }
         }
         lift.move(power);
+        ratchetWithLift(power);  // the ratchet motor shares the winch (toggle.hpp)
         pros::delay(10);
     }
 }

@@ -6,6 +6,7 @@
 #include "lift.hpp"
 #include "tuner.hpp"
 #include "resets.hpp"
+#include "toggle.hpp"
 #include "rw-config.h"
 #include <algorithm>
 #include <cmath>
@@ -141,6 +142,16 @@ static void draw() {
 
     // RW-Template odometry coordinates and heading
     pros::lcd::print(6, "X %.1f  Y %.1f  H %.1f", x_pos, y_pos, getInertialHeading());
+
+    // Toggle shaft angle (for TOGGLE_REST_DEG) and what the optical sensor sees.
+    ToggleStatus t = toggleStatus();
+    if (!t.motorWired) {
+        pros::lcd::print(2, "Toggle: ratchet motor port not set");
+    } else if (!t.sensorWired) {
+        pros::lcd::print(2, "Toggle: no rotation sensor (by time)  sees %s", toggleColorName(t.color));
+    } else {
+        pros::lcd::print(2, "Toggle %.0f deg  sees %s%s", t.angle, toggleColorName(t.color), t.flipping ? "  flipping" : "");
+    }
 
     // Tuned values only last until reboot, so keep them up where they're easy to copy.
     if (distCal.done || turnCal.done) {

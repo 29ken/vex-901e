@@ -7,11 +7,14 @@
 #include "screens.hpp"
 #include "claw.hpp"
 #include "watch.hpp"
+#include "toggle.hpp"
+#include <cstring>
 
 void initialize() {
     initDrive();
     initLift();
     initClaw();
+    initToggle();
     initWatch();
     startBrainScreen();
     startControllerScreen();
@@ -70,6 +73,12 @@ void opcontrol() {
         // 5. L2: let go of the pin
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
             clawRelease();
+        }
+
+        // 6. B: flip the toggle next to the flapper to our colour. Our colour is
+        // the selected auton's ("Blue ..." = blue, anything else = red).
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+            setToggleAsync(std::strncmp(autons[selectedAuton].name, "Blue", 4) == 0);
         }
 
         pros::delay(10);  // inside da loop
