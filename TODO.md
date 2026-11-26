@@ -116,6 +116,14 @@ Brain screen, middle button = Distance page.
       flapper must not touch the toggle at the start (<SG1>).
 - [ ] Which way up are the cups in the wall stacks and loose Cup+Pins (gray
       half up or clear half up)? The scoring count assumes gray up.
+- [ ] **Wall stack at an angle** (what 1698Z and 8275K do, no extended sleds):
+      drive at a wall stack by hand so one front corner touches the wall, and
+      find how far off square the robot can be with the claw still closing
+      cleanly on the stack. The math says best at about 6 degrees, usable to
+      about 10. Then set `WALL_GRAB_ANGLE_DEFAULT` in
+      `src/auton/autonroutes.cpp` to that angle, run Red Left 4, and note
+      where the robot is after each wall stack (the routes after the grab were
+      tuned for a square robot and will need adjusting).
 - [ ] How long does a real toggle flip take (B on the controller, time it)?
       Paste into `TOGGLE_FLIP_MS` in `include/toggle.hpp` (600 is a guess; the
       simulator uses it). The solo AWP route needs this.
