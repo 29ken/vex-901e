@@ -379,6 +379,20 @@ constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: 
 // stack gets the same shift mirrored. Set it if a stack ends off-centre the same
 // way every time. TODO: practice
 constexpr double WALL_AIM_SHIFT = 0;
+// How far off square the robot is when it grabs a wall stack, degrees. The claw
+// point is 0.89 in inside the frame's front and a stack is 1.55 in off the
+// wall, so square on the wall the stack is 0.66 in too deep in the claw. With
+// one front corner on the wall and the robot this far off square, the claw
+// point is 0.89 cos(a) + 6.14 sin(a) from the wall: 1.55 in at 6 degrees. So
+// it stops turning there and grabs, with no push. 0 = square up and push.
+// The lab can override it (env WALL_GRAB_ANGLE) to compare.
+constexpr double WALL_GRAB_ANGLE_DEFAULT = 0;
+double wallGrabAngle() {
+#ifdef RW_SIM_PROS
+    if (const char* e = std::getenv("WALL_GRAB_ANGLE")) return std::atof(e);
+#endif
+    return WALL_GRAB_ANGLE_DEFAULT;
+}
 // Set after a wall stack the claw's sensor didn't confirm (see resetAtStop()).
 bool stackMayBeBehind = false;
 
@@ -427,9 +441,12 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
     }
     step("corner on the wall");
-    curveCircle(turned(faceWall), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // squares up, pressing the corner on the wall
-    driveChassis(3, 3);  // a gentle push to seat the front on the wall
-    pros::delay(150);
+    double grabAngle = wallGrabAngle();
+    curveCircle(turned(faceWall - fromSide * grabAngle), fromSide * WALL_TURN_RADIUS, 700, true, 8);  // turns toward square, pressing the corner on the wall
+    if (grabAngle == 0) {
+        driveChassis(3, 3);  // a gentle push to seat the front on the wall
+        pros::delay(150);
+    }
     driveChassis(0, 0);
     // Only now look for the stack: armed earlier, the claw could close during
     // the curve and drag the stack. So `seen` means it's in the claw now.
@@ -450,11 +467,22 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     bool holding = seen;
 #endif
     double heading = getInertialHeading();
-    if (std::fabs(std::remainder(heading - turned(faceWall), 360.0)) <= 4) {
+    // With a front corner on the wall and the robot `tilt` off square, the
+    // centre is FRONT cos(tilt) + HALF_WIDTH sin(tilt) from the wall.
+    double tilt = std::fabs(std::remainder(heading - turned(faceWall), 360.0)) * M_PI / 180;
+    double centreOut = FRONT * std::cos(tilt) + HALF_WIDTH * std::sin(tilt);
+    if (tilt * 180 / M_PI <= grabAngle + 4) {
         Pt before = at({x_pos, y_pos});
-        double off = (before.x * toWall.x + before.y * toWall.y) - (WALL - FRONT);  // how far past the wall RW thinks the front is
+        double off = (before.x * toWall.x + before.y * toWall.y) - (WALL - centreOut);  // how far past the wall RW thinks the corner is
         Pt now{before.x - toWall.x * off, before.y - toWall.y * off};
-        if (holding) now = {stack.x - toWall.x * back, stack.y - toWall.y * back};
+        if (holding) {
+            // The stack is in the claw: REACH ahead of the centre along the heading.
+            double hr = (blue ? heading - 180 : heading) * M_PI / 180;
+            now = {stack.x - std::sin(hr) * REACH, stack.y - std::cos(hr) * REACH};
+            // The wall still gives the distance from it exactly.
+            double offNow = (now.x * toWall.x + now.y * toWall.y) - (WALL - centreOut);
+            now = {now.x - toWall.x * offNow, now.y - toWall.y * offNow};
+        }
         Pt f = at(now);
         setPose(f.x, f.y, heading);
         std::printf("Wall contact%s: (%.2f, %.2f) -> (%.2f, %.2f)\n", holding ? " + stack" : "", before.x, before.y, now.x, now.y);
@@ -464,7 +492,7 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     { Pt gone = at(stack); watchTaken(gone.x, gone.y); }
     stackMayBeBehind = !seen;  // the simulator's sensor never sees it, so there the back sensor sits this stop out
     liftTo(nextLift);  // rises while it backs out and turns
-    driveTo(-(GAP_TURN - FRONT), msFor(GAP_TURN - FRONT) + 300, true, GAP_VOLTS);  // slow: an inch too far and it can't turn
+    driveTo(-(GAP_TURN - centreOut), msFor(GAP_TURN - centreOut) + 300, true, GAP_VOLTS);  // slow: an inch too far and it can't turn
     settle();  // the next move spins here
     step("wall stack");
     std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
