@@ -48,6 +48,7 @@
 #include "resets.hpp"
 #include "toggle.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -692,6 +693,34 @@ void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}) {
     step("off the wall");
 }
 
+// Flips a toggle side-on while driving past it. V4 has a side flap on each
+// side of the toggle shaft (CAD: 6.05-7.55 in from the centre line, so 1.35 in
+// past the frame's side, and 6.4-7.1 in behind the robot's centre). With the
+// robot alongside the wall and its side within about an inch of it, that flap
+// is over the toggle. The curve through `pts` (red coordinates) should run
+// along the wall, slowly, about SIDE_GAP off it; the flip starts when the
+// robot's centre comes within 3 in of `where` and takes TOGGLE_FLIP_MS, during
+// which the flap (SIDE_FLAP_BEHIND behind the centre) has to stay over the
+// toggle (25.8 in long, centred on the wall). Ends rolling. Untested on the
+// robot: how close the side has to be, and whether it can flip while moving.
+constexpr double SIDE_FLAP_BEHIND = 6.75;
+Pt sideFlipWhere{0, 0};
+std::atomic<bool> sideFlipBusy{false};
+void sideFlipTask(void*) {
+    std::uint32_t began = pros::millis();
+    while (distanceTo(sideFlipWhere) > 3 && pros::millis() - began < 6000) pros::delay(10);
+    setToggle(blue);
+    step("toggle");
+    sideFlipBusy = false;
+}
+void sideToggle(Pt where, const std::vector<Via>& pts) {
+    sideFlipWhere = at(where);
+    sideFlipBusy = true;
+    pros::Task flip(sideFlipTask, nullptr, "Side toggle");
+    curve(pts, false, false, TOP_IPS);
+    step("along the toggle");
+}
+
 // Turns on the spot to face a point (red coordinates). Only from a stop.
 void faceTo(Pt p) {
     turnOnSpotNext = false;
@@ -772,13 +801,15 @@ void redLeft5() {
 // 3 goals with 2 or more each, both of our toggles ours, off the wall at the end.
 // Each black goal starts with a yellow pin (1 half once its toggle is ours), so
 // the robot adds the preload and four loose Cup+Pins: red goal 3, left black
-// goal 2, bottom black goal 2. No wall stacks.
-// NOT IN TIME YET: in the simulator all five pieces are down by 13.8 s but the
-// bottom toggle flips at about 16.2 s (ends 16.5 s), so at 15 s it has 5 halves
-// on 2 goals. It is here to practise and tune. The square back-in at the bottom
-// toggle costs about 2.6 s: flipping it side-on while driving along the wall is
-// the next thing to try. Several aim points are corrected by 1-2.4 in for the
-// simulator's corner-cutting: re-measure them on the field.
+// goal 2, bottom black goal 2. No wall stacks. The bottom toggle is flipped
+// side-on (sideToggle) on the way back west along the bottom wall.
+// NOT IN TIME YET: in the simulator it ends at 16.2 s. At 15 s it has both
+// toggles, three goals with 2 or more, and 6 of the 7 halves: the corner
+// Cup+Pin goes on the red goal at 16.0 s. Getting alongside the bottom wall
+// from the bottom black goal costs a stop and a turn (about 1 s). The pass
+// along the wall has about +-0.3 in of room and RW is 0.5-0.8 in out there,
+// so it needs a distance reset before it can be trusted. Several aim points
+// are corrected by 1-2.4 in for the simulator: re-measure them on the field.
 void redSoloAwp() {
     startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
     scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});
@@ -789,14 +820,15 @@ void redSoloAwp() {
     turnToAngle(turned(168), 900);
     take({-24.6, -25.5}, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, {{-27, -10}});
     scoreOn({-48.3, -23.6}, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal", {{-26, -33}, {-34, -31}});
-    backAway(5, {{-32, -34}, {-29, -32}});
-    take({-46.56, -46.72}, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-40, -42}});
-    scoreOn({-49, -22}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-52, -54}, {-56, -42}, {-52, -36}});
-    backAway(4, {{-55, -34}, {-58, -36}});
-    take(MID_BOTTOM, "Cup+Pin at the Midfield's bottom edge", LIFT_NEUTRAL_GOAL, {{-36, -34}, {-16, -27}});
-    scoreOn({23.31, -45}, LIFT_NEUTRAL_GOAL, "bottom black goal", {{8, -34}});
-    backAway(4, {{0, -46}, {-6, -51.5}, {-6, -53.2}});
-    flipToggleAt({-6, -WALL + BACK}, 0);
+    backAway(5, {{-38, -33}, {-40, -36}});
+    take({-3.7, -23.6}, "Cup+Pin at the Midfield's bottom edge", LIFT_NEUTRAL_GOAL, {{-30, -31}, {-16, -27}});
+    scoreOn({22.6, -46}, LIFT_NEUTRAL_GOAL, "bottom black goal", {{8, -34}});
+    backAway(4, {{15, -37}});
+    curve({{13, -48}, {14.5, -53, 0.75}, {14.8, -57, 0.45}}, false, true, TOP_IPS);
+    turnToAngle(turned(251), 900);
+    sideToggle({-0.5, -63.6}, {{8.5, -62, 0.5}, {1.5, -63.6, 0.27}, {-5.5, -63.6, 0.24}, {-13, -62.9, 0.7}, {-25, -59}});
+    take({-47.2, -48.4}, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-34, -55}});
+    scoreOn({-48.1, -24.85}, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-50, -38}});
 }
 
 // Bottom Quadrant: toggle, preload and the corner Cup+Pin on the red goal.
@@ -861,6 +893,7 @@ void asBlue() {
 //   face PT / turn HEADING              turn on the spot
 //   oldscore GOAL LIFT / oldtake PIECE LIFT   the stop-and-go helpers
 //   toggle X Y HEADING [PT ...]         flipToggleAt: a second toggle (bottom: toggle -6 -62.61 0)
+//   sidetoggle X Y PT ...               sideToggle: flips side-on, starting when the centre is within 3 in of X,Y
 //   wait MS / lift LIFT / settle
 // PT is x,y or x,y,speed. GOAL: RG RGB BG or x,y. PIECE: YF YN ME or x,y.
 // STACK: W1 W2. LIFT: GRAB CARRY A0 A1 A2 N0 N1 or a number.
@@ -961,6 +994,8 @@ void lab() {
             liftTo(labLift(t[1]));
         } else if (c == "toggle" && t.size() >= 4) {
             flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(4));
+        } else if (c == "sidetoggle" && t.size() >= 4) {
+            sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(3));
         } else if (c == "settle") {
             settle();
         } else {
