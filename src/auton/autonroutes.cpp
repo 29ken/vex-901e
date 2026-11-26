@@ -108,6 +108,7 @@ constexpr Pt MID_EDGE{-22.8, -1.9};    // red/blue pin, middle of the Midfield's
 constexpr Pt MID_BOTTOM{-2.4, -24.2};  // loose Cup+Pin by the Midfield's bottom edge (off the video, +-3 in)
 constexpr Pt BLACK_GOAL_BOTTOM{23.55, -47.09};  // black goal, bottom Quadrant: starts with a yellow pin on it
 constexpr Pt STACK_BY_RED_GOAL_BOTTOM{-23.6, -68.7};
+constexpr Pt STACK_BY_BLACK_GOAL_BOTTOM{23.6, -68.7};  // on the bottom wall, in front of the bottom black goal
 
 // What the robot drives around: all nine goals, the eight wall stacks and the
 // four loaders, in field coordinates (the same set for red and blue), and how
@@ -419,7 +420,7 @@ void squareMotion() { curveCircle(squareAngle, squareRadius, 700, true, 8); }
 // flow: the approach is one curve through `via`, then down the 45 degree line
 // to the wall, instead of stopping at the line-up point to turn.
 void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY,
-                   bool flow = false, std::vector<Via> via = {}, bool backOut = true) {
+                   bool flow = false, std::vector<Via> via = {}, bool backOut = true, bool approach = true) {
     double a = faceWall * M_PI / 180;
     Pt toWall{std::sin(a), std::cos(a)};
     Pt along{fromSide * std::cos(a), -fromSide * std::sin(a)};  // toward the side it comes from
@@ -445,7 +446,11 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     // Straight to the contact pose when already on the 45 degree line, else through the line-up point.
     double bearing = std::atan2(k.x - x_pos, k.y - y_pos) * 180 / M_PI;
     bool direct = std::fabs(std::remainder(bearing - turned(contactHeading), 360.0)) <= 6 && distanceTo(k) <= WALL_LINEUP + 8;
-    if (flow) {
+    if (!approach) {
+        // Already alongside the wall, a front corner at it (after a side-on
+        // toggle pass): the turn about that corner is 90 degrees, not 45.
+        step("alongside the wall");
+    } else if (flow) {
         via.push_back({lineup.x, lineup.y, 0.6});
         via.push_back({past.x, past.y, 0.25});
         curve(via, false, true, 45);
@@ -457,7 +462,7 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         settle();  // still rolling ~16 in/s here, it coasted 1.8 in past the line-up point during the turn
         turnToAngle(turned(contactHeading), 700);  // and faces along it: the corner has to meet the wall where planned
     }
-    if (!flow) {
+    if (!flow && approach) {
         step(direct ? "to the wall stack (straight in)" : "to the wall stack");
         aimIfNeeded(k, FINAL_AIM_DEG);  // the drive-in is straight: arriving 8 degrees off moved the claw ~2 in
         moveToPoint(kp.x, kp.y, 1, static_cast<int>(200 + 28 * distanceTo(kp)), true, FINAL_VOLTS);
@@ -794,16 +799,32 @@ void gapBack(Pt goal) {
 // Win Point the robot must not end touching the wall).
 constexpr double TOGGLE_LINEUP = 10;
 constexpr double TOGGLE_ROLL_OFF = 2;  // off the wall and off the toggle afterwards. TODO: practice (does the flapper clear it?)
-void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}) {
+// reverseIn: the robot comes tail first (a reverse curve through `via`), so it
+// keeps rolling backwards onto the wall with no stop and no turn in front of it.
+// With its back flat on the wall it also knows its distance from that wall.
+void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool reverseIn = false) {
     double h = heading * M_PI / 180;
     Pt front{centre.x + std::sin(h) * TOGGLE_LINEUP, centre.y + std::cos(h) * TOGGLE_LINEUP};
-    via.push_back({front.x, front.y, 0.5});
-    curve(via, false, true, TOP_IPS);
-    // Already close to square (a reverse curve can arrive that way): no turn needed.
-    if (std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) > 5) turnToAngle(turned(heading), 900);
+    if (reverseIn) {
+        via.push_back({front.x, front.y, 0.45});
+        curve(via, true, false, TOP_IPS);
+    } else {
+        via.push_back({front.x, front.y, 0.5});
+        curve(via, false, true, TOP_IPS);
+        // Already close to square (a reverse curve can arrive that way): no turn needed.
+        if (std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) > 5) turnToAngle(turned(heading), 900);
+    }
     step("to the toggle");
     Pt wall = at({centre.x - std::sin(h) * 0.5, centre.y - std::cos(h) * 0.5});
     moveToPoint(wall.x, wall.y, -1, msFor(TOGGLE_LINEUP), true, 9);
+    if (reverseIn && std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) <= 4) {
+        // Back flat on the wall: the centre is BACK from it. Set that coordinate, keep the other.
+        Pt b = at({x_pos, y_pos});  // red coordinates
+        Pt fixed = std::fabs(std::sin(h)) > 0.7 ? Pt{centre.x, b.y} : Pt{b.x, centre.y};
+        Pt f = at(fixed);
+        std::printf("Back on the wall: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, f.x, f.y);
+        setPose(f.x, f.y, getInertialHeading());
+    }
     setToggle(blue);
     step("toggle");
     driveTo(TOGGLE_ROLL_OFF, msFor(TOGGLE_ROLL_OFF));
@@ -1046,7 +1067,7 @@ bool labPoint(const std::string& t, Via& v) {
     static const std::map<std::string, Pt> named = {
         {"RG", RED_GOAL_LEFT}, {"RGB", RED_GOAL_BOTTOM}, {"BG", BLACK_GOAL_LEFT},
         {"YF", DIAG_FAR}, {"YN", DIAG_NEAR}, {"ME", MID_EDGE}, {"M2", MID_BOTTOM}, {"BK2", BLACK_GOAL_BOTTOM},
-        {"W1", STACK_BY_RED_GOAL}, {"W2", STACK_BY_BLACK_GOAL}, {"W3", STACK_BY_RED_GOAL_BOTTOM}};
+        {"W1", STACK_BY_RED_GOAL}, {"W2", STACK_BY_BLACK_GOAL}, {"W3", STACK_BY_RED_GOAL_BOTTOM}, {"W4", STACK_BY_BLACK_GOAL_BOTTOM}};
     auto it = named.find(t);
     if (it != named.end()) {
         v = {it->second.x, it->second.y, 1};
@@ -1073,7 +1094,7 @@ const char* labName(const std::string& t) {
         {"RG", "alliance goal"}, {"RGB", "bottom alliance goal"}, {"BG", "black goal"}, {"BK2", "bottom black goal"},
         {"M2", "Cup+Pin at the Midfield's bottom edge"}, {"W3", "wall stack by the bottom alliance goal"},
         {"YF", "yellow Cup+Pin by the corner"}, {"YN", "yellow Cup+Pin by the Midfield"}, {"ME", "Cup+Pin at the Midfield's edge"},
-        {"W1", "wall stack by the alliance goal"}, {"W2", "wall stack by the black goal"}};
+        {"W1", "wall stack by the alliance goal"}, {"W2", "wall stack by the black goal"}, {"W4", "wall stack by the bottom black goal"}};
     auto it = names.find(t);
     if (it == names.end()) it = names.emplace(t, "thing at " + t).first;
     return it->second.c_str();
@@ -1121,7 +1142,12 @@ void lab() {
             bool flow = t.size() > 5 && t[5] == "flow";
             bool backOut = t.back() != "noback";
             if (!backOut) t.pop_back();
-            grabWallStack({target.x, target.y}, std::atof(t[2].c_str()), std::atoi(t[3].c_str()), labName(t[1]), labLift(t[4]), flow, points(flow ? 6 : 5), backOut);
+            bool pivot = t.size() > 5 && t[5] == "pivot";
+            grabWallStack({target.x, target.y}, std::atof(t[2].c_str()), std::atoi(t[3].c_str()), labName(t[1]), labLift(t[4]), flow, points(flow || pivot ? 6 : 5), backOut, !pivot);
+        } else if (c == "wallin") {
+            // A reverse curve that ends alongside a wall and may touch it on the way in (planned).
+            curve(points(1), true, true, TOP_IPS);
+            step("onto the wall");
         } else if (c == "swing" && t.size() >= 3) {
             swing(turned(std::atof(t[1].c_str())), std::atof(t[2].c_str()), 900, t.size() < 4 || t[3] != "roll", knob("SWING_VOLTS", 12));
             step("swing");
@@ -1143,7 +1169,8 @@ void lab() {
         } else if (c == "lift" && t.size() >= 2) {
             liftTo(labLift(t[1]));
         } else if (c == "toggle" && t.size() >= 4) {
-            flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(4));
+            bool rev = t.size() > 4 && t[4] == "rev";
+            flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(rev ? 5 : 4), rev);
         } else if (c == "sidetoggle" && t.size() >= 4) {
             bool ram = t.size() > 3 && t[3] == "ram";
             sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(ram ? 4 : 3), ram);
