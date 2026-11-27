@@ -1195,7 +1195,7 @@ void testDriveBy(double inches) {
     pros::delay(400);
 }
 
-// Turn PID: 90 right twice, 90 left twice, 180 right, 180 left, 25 right, 25 left,
+// Turn PID: 90 right twice, 90 left twice, 180 right, 180 left, 45 right, 45 left,
 // with a pause between. About 13 s in the simulator, close to Timed Run's 15 s,
 // so the controller's Programming Skills mode (60 s) is the safe way to run it.
 // Needs room to spin; no pieces.
@@ -1209,8 +1209,8 @@ void testTurn() {
     testTurnBy(-90);
     testTurnBy(180);
     testTurnBy(-180);
-    testTurnBy(25);    // the routes' small aim corrections are this size
-    testTurnBy(-25);
+    testTurnBy(45);    // a smaller turn: small turns settle differently from big ones
+    testTurnBy(-45);
 }
 
 // Move PID: 24 in forward and back, twice. Needs 3 ft clear in front.

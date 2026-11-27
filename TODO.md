@@ -72,9 +72,9 @@ Controller menu: X opens it, UP steps through it, A starts.
 - [ ] **Turn PID**, then **Move PID**, by hand, with the two test autons in the
       auton picker (no pieces needed):
       - **`Test: turn`**: 90 right twice, 90 left twice, 180 right, 180 left,
-        25 right, 25 left, with a pause between. About 13 s, close to Timed
+        45 right, 45 left, with a pause between. About 13 s, close to Timed
         Run's 15 s, so run it in the controller's **Programming Skills** mode
-        to be safe. (25 is the size of the routes' small aim corrections.)
+        to be safe.
       - **`Test: drive`**: 24 in forward and back, twice. About 8 s; Timed Run
         is fine.
       - How teams tune (LemLib's and EZ-Template's guides agree): start with I
