@@ -133,12 +133,12 @@ How the pieces fit together (and where the robot's weight comes in):
       - `LIFT_PRESETS`
 - [ ] **Lift speed**: time the lift from the bottom to the third-piece height
       and back down, with a piece in the claw. Paste units per second into
-      `LIFT_DPS` in `src/auton/autonroutes.cpp` (550 is a guess).
+      `LIFT_DPS` in `src/auton/auton.hpp` (550 is a guess).
 - [ ] **Auton lift gain**: autons run the lift harder than the driver presets
       (`LIFT_KP_AUTON` 2.0 in `include/lift.hpp`). Watch one auton lift move
       with a piece: if it overshoots or bounces, lower it toward 0.5.
 - [ ] **Claw**: how long it takes to close on a Cup+Pin and to open
-      (`CLAW_CLOSE_MS`, `CLAW_OPEN_MS` in `autonroutes.cpp`, both 150), and the
+      (`CLAW_CLOSE_MS`, `CLAW_OPEN_MS` in `auton.hpp`, both 150), and the
       distance at which the sensor sees a piece (`AUTOGRAB_MM` in `config.hpp`).
 - [ ] With the front of the robot flat on a wall and a wall stack in the claw,
       does the claw still close on it and centre it? (The stack sits 0.66 in
@@ -193,7 +193,7 @@ Brain screen, middle button = Distance page.
 
 - [ ] **Loose Cup+Pins**: tape-measure where each one sits from the two nearest
       walls. The code has them from a video, good to about 3 in, and the claw
-      only takes 1.4 in. Paste into `autonroutes.cpp`: `DIAG_FAR`, `DIAG_NEAR`,
+      only takes 1.4 in. Paste into `src/auton/auton.hpp`: `DIAG_FAR`, `DIAG_NEAR`,
       `MID_EDGE`, `MID_BOTTOM` (inches from the field centre; the walls are at
       70.25).
 - [ ] **Wall stacks**: wall face to the centre of the stack (`STACK_FROM_WALL`,
@@ -208,7 +208,7 @@ Brain screen, middle button = Distance page.
       find how far off square the robot can be with the claw still closing
       cleanly on the stack. The math says best at about 6 degrees, usable to
       about 10. Then set `WALL_GRAB_ANGLE_DEFAULT` in
-      `src/auton/autonroutes.cpp` to that angle, run Red Left 4, and note
+      `src/auton/wallstack.cpp` to that angle, run Red Left 4, and note
       where the robot is after each wall stack (the routes after the grab were
       tuned for a square robot and will need adjusting).
 - [ ] How long does a real toggle flip take (B on the controller, time it)?
@@ -226,7 +226,7 @@ terminal (it prints each step's time and what the claw sensor saw).
       and the robot clear the goal backing off (`BACK_OFF`)?
 - [ ] **Red Left 4** (4 pieces, sim: all on by 13.4 s). Curved, with two wall
       stacks. First with `TOP_IPS` lowered from 45 to about 25 in
-      `autonroutes.cpp`. Then raise it in steps until grabs stop landing every
+      `src/auton/flow.cpp`. Then raise it in steps until grabs stop landing every
       time, and back off one step.
       - Loose piece missed the same way every run: shift that leg's points.
       - Scattered: that curve is too fast; lower the speed number on its points.
@@ -302,7 +302,7 @@ toggle is ours.
       lightly onto the goal while the claw opens, then sets the robot's
       position from the goal. At practice: watch that the robot really ends
       pressed onto the goal, and measure how far the goal's centre is ahead of
-      the robot's centre when seated (`GOAL_SEAT` in `autonroutes.cpp`, 6.0 is
+      the robot's centre when seated (`GOAL_SEAT` in `src/auton/flow.cpp`, 6.0 is
       from the CAD). The terminal prints "Goal seat: ..." each time.
 - [ ] **Wall stacks** now grab as soon as the robot is within 3 degrees of
       square (`WALL_SQUARE_EXIT_DEG`), with no push (`WALL_PUSH_MS` 0). If the
