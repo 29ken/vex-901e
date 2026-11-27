@@ -208,7 +208,7 @@ Brain screen, middle button = Distance page.
       find how far off square the robot can be with the claw still closing
       cleanly on the stack. The math says best at about 6 degrees, usable to
       about 10. Then set `WALL_GRAB_ANGLE_DEFAULT` in
-      `src/auton/wallstack.cpp` to that angle, run Red Left 4, and note
+      `src/auton/moves.cpp` to that angle, run Red Left 4, and note
       where the robot is after each wall stack (the routes after the grab were
       tuned for a square robot and will need adjusting).
 - [ ] How long does a real toggle flip take (B on the controller, time it)?
@@ -226,7 +226,7 @@ terminal (it prints each step's time and what the claw sensor saw).
       and the robot clear the goal backing off (`BACK_OFF`)?
 - [ ] **Red Left 4** (4 pieces, sim: all on by 13.4 s). Curved, with two wall
       stacks. First with `TOP_IPS` lowered from 45 to about 25 in
-      `src/auton/flow.cpp`. Then raise it in steps until grabs stop landing every
+      `src/auton/moves.cpp`. Then raise it in steps until grabs stop landing every
       time, and back off one step.
       - Loose piece missed the same way every run: shift that leg's points.
       - Scattered: that curve is too fast; lower the speed number on its points.
@@ -302,7 +302,7 @@ toggle is ours.
       lightly onto the goal while the claw opens, then sets the robot's
       position from the goal. At practice: watch that the robot really ends
       pressed onto the goal, and measure how far the goal's centre is ahead of
-      the robot's centre when seated (`GOAL_SEAT` in `src/auton/flow.cpp`, 6.0 is
+      the robot's centre when seated (`GOAL_SEAT` in `src/auton/moves.cpp`, 6.0 is
       from the CAD). The terminal prints "Goal seat: ..." each time.
 - [ ] **Wall stacks** now grab as soon as the robot is within 3 degrees of
       square (`WALL_SQUARE_EXIT_DEG`), with no push (`WALL_PUSH_MS` 0). If the

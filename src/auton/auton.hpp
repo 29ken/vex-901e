@@ -41,11 +41,7 @@
 //
 // The auton code is split by job (all in src/auton/):
 //   auton.hpp      this file: the robot's and field's numbers, and what each file offers the others
-//   basics.cpp     red/blue, small helpers, step timing
-//   stopgo.cpp     the older stop-and-turn moves (Red Left 3, Red Right 2, Skills use them)
-//   wallstack.cpp  taking a Cup+Pin stack off a wall
-//   flow.cpp       curved moves: take a piece rolling, score, back away, the goal reset
-//   toggles.cpp    flipping a second toggle (backing in, or side-on)
+//   moves.cpp      how the robot does each kind of move: drive, grab, score, wall stacks, toggles
 //   routes.cpp     the routes themselves, the auton list, runAuton()
 //   practice.cpp   set-up and test runs (Cal: ..., Test: ...)
 //   lab.cpp        simulator only: routes from a text script
@@ -159,14 +155,14 @@ constexpr double LIFT_NEAR_GRAB = 10;
 constexpr double GAP_VOLTS = 5;           // backing out to GAP_TURN: at 8 V it went an inch too far
 constexpr double LIFT_CLEAR = 2;     // the open claw is clear of a piece it let go this far back. TODO: practice
 
-// A point on a curved leg (see "Curved moves" in flow.cpp): red coordinates, and the
+// A point on a curved leg (see "Curved moves" in moves.cpp): red coordinates, and the
 // top speed passing it as a fraction of TOP_IPS.
 struct Via {
     double x, y;
     double speed = 1;
 };
 
-// ---- basics.cpp ------------------------------------------------------------------
+// ---- moves.cpp: red or blue, small helpers, step timing ---------------------------
 extern bool blue;  // the blue autons set this and run the red route
 double knob(const char* name, double fallback);
 Pt at(Pt p);
@@ -179,7 +175,7 @@ void step(const char* what);
 void aimAt(Pt fieldPoint);
 void driveToField(Pt p, double volts = 12);
 
-// ---- stopgo.cpp ------------------------------------------------------------------
+// ---- moves.cpp: stop-and-turn moves ----------------------------------------------
 extern bool turnOnSpotNext;
 void startAtToggle(Pt centre, double heading, double firstLift = LIFT_ALLIANCE_GOAL, bool rollOff = true);
 void aimIfNeeded(Pt t, double maxOff);
@@ -194,13 +190,13 @@ void settle();
 void backOffToTurn(Pt goal);
 void score(Pt goal, double liftHeight, const char* name);
 
-// ---- wallstack.cpp ---------------------------------------------------------------
+// ---- moves.cpp: wall stacks ------------------------------------------------------
 extern double wallAimNext, wallApproachNext, wallLineupSkipNext;  // for the next wall stack only
 extern bool stackMayBeBehind;
 void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, double nextLift = LIFT_CARRY,
                    bool flow = false, std::vector<Via> via = {}, bool backOut = true, bool approach = true);
 
-// ---- flow.cpp --------------------------------------------------------------------
+// ---- moves.cpp: curved moves -----------------------------------------------------
 extern double TOP_IPS;  // top path speed, in/s
 // Faster drive limits for one route, put back when the route ends. TOP_IPS is
 // the top path speed and RW's profile_max_accel how hard it speeds up and
@@ -232,7 +228,7 @@ void backAway(double straight, std::vector<Via> then = {});
 void gapBack(Pt goal);
 void faceTo(Pt p);
 
-// ---- toggles.cpp -----------------------------------------------------------------
+// ---- moves.cpp: second toggle ----------------------------------------------------
 void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool reverseIn = false, bool rollOff = true);
 void sideToggle(Pt where, const std::vector<Via>& pts, bool ram = false);
 
