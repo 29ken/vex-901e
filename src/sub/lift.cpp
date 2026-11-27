@@ -1,4 +1,5 @@
 #include "lift.hpp"
+#include "runlog.hpp"
 #include "toggle.hpp"
 #include <cstdio>
 #include <mutex>
@@ -58,25 +59,25 @@ static void loop() {
             }
 
             if (control.top.found && !saidTop) {
-                std::printf("Lift top found at %.0f\n", control.height(control.top.position));
+                say("Lift top found at %.0f\n", control.height(control.top.position));
                 saidTop = true;
             }
             if (control.zeroed && control.zero != lastZero) {
-                std::printf("Lift re-zeroed\n");
+                say("Lift re-zeroed\n");
                 lastZero = control.zero;
             }
             if (control.backwards && !saidBackwards) {
-                std::printf("Lift sensor counts backwards; set LIFT_SENSOR to %d\n", -LIFT_SENSOR);
+                say("Lift sensor counts backwards; set LIFT_SENSOR to %d\n", -LIFT_SENSOR);
                 saidBackwards = true;
             }
             if (control.stoppedShort > 0) {
-                std::printf("Lift stopped %.0f short of a preset: either that preset is above the "
+                say("Lift stopped %.0f short of a preset: either that preset is above the "
                             "top, or the lift needs a higher LIFT_MIN_POWER\n",
                             control.stoppedShort);
                 control.stoppedShort = 0;
             }
             if (!ok && !saidMissing) {
-                std::printf("Lift sensor on port %d not responding\n", std::abs(LIFT_SENSOR));
+                say("Lift sensor on port %d not responding\n", std::abs(LIFT_SENSOR));
                 saidMissing = true;
             }
         }
@@ -93,7 +94,7 @@ void initLift() {
     if (readSensor(raw)) {
         control.setZero(raw);
     } else {
-        std::printf("Lift sensor on port %d not found at startup; restart with the lift down\n",
+        say("Lift sensor on port %d not found at startup; restart with the lift down\n",
                     std::abs(LIFT_SENSOR));
     }
     pros::Task task(loop, "Lift");

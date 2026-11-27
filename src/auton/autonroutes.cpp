@@ -40,6 +40,8 @@
 // or lets it slide: the wall stacks in Red Left 4/5 depend on which.
 
 #include "autons.hpp"
+#include "runlog.hpp"
+#include <cstring>
 #include "drivetrain.hpp"
 #include "claw.hpp"
 #include "watch.hpp"
@@ -170,7 +172,7 @@ Pt clawStop(Pt target, double extra = 0) {
 std::uint32_t stepStart = 0;
 void step(const char* what) {
     std::uint32_t now = pros::millis();
-    std::printf("  %5.2f s  +%4u ms  %s\n", now / 1000.0, now - stepStart, what);
+    say("  %5.2f s  +%4u ms  %s\n", now / 1000.0, now - stepStart, what);
     stepStart = now;
 }
 
@@ -336,7 +338,7 @@ void grab(Pt piece, const char* name, double nextLift = LIFT_CARRY) {
     clawGrab();  // close anyway: a cup's clear half can hide it from the sensor
     pros::delay(CLAW_CLOSE_MS);
     liftTo(nextLift);  // rises on the way to the goal
-    std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
+    say("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
 // Stops dead and holds for a moment. Every RW move starts by letting the
@@ -546,9 +548,9 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         }
         Pt f = at(now);
         setPose(f.x, f.y, heading);
-        std::printf("Wall contact%s: (%.2f, %.2f) -> (%.2f, %.2f)\n", holding ? " + stack" : "", before.x, before.y, now.x, now.y);
+        say("Wall contact%s: (%.2f, %.2f) -> (%.2f, %.2f)\n", holding ? " + stack" : "", before.x, before.y, now.x, now.y);
     } else {
-        std::printf("Wall contact: not square (heading %.1f), no reset\n", heading);
+        say("Wall contact: not square (heading %.1f), no reset\n", heading);
     }
     { Pt gone = at(stack); watchTaken(gone.x, gone.y); }
     stackMayBeBehind = !seen;  // the simulator's sensor never sees it, so there the back sensor sits this stop out
@@ -558,7 +560,7 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         settle();  // the next move spins here
     }
     step("wall stack");
-    std::printf("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
+    say("Grab %s: %s\n", name, seen ? "sensor saw it" : "closed without the sensor seeing it");
 }
 
 // Puts what the claw holds on a goal (red coordinates), then backs off (to a
@@ -588,7 +590,7 @@ void backOffToTurn(Pt goal) {
     driveTo(-best, msFor(best) + 300, true, GAP_VOLTS);
     settle();
     turnOnSpotNext = true;
-    std::printf("Back off %.2f in: %.2f in to spare when it turns\n", best, most);
+    say("Back off %.2f in: %.2f in to spare when it turns\n", best, most);
 }
 
 void score(Pt goal, double liftHeight, const char* name) {
@@ -599,7 +601,7 @@ void score(Pt goal, double liftHeight, const char* name) {
     backOffToTurn(at(goal));
     liftTo(LIFT_GRAB);
     step("release + back off");
-    std::printf("Scored on %s\n", name);
+    say("Scored on %s\n", name);
 }
 
 // ---- Curved moves (RW's followPath) ---------------------------------------------
@@ -699,7 +701,7 @@ void take(Pt piece, const char* name, double nextLift, std::vector<Via> via = {}
     watchTaken(f.x, f.y);
     liftTo(nextLift);  // rises on the way to the goal
     step("took it rolling");
-    std::printf("Grab %s: %s at %.2f s\n", name, how == 's' ? "sensor saw it" : how == 'o' ? "closed by position" : "closed at the end of the curve", when);
+    say("Grab %s: %s at %.2f s\n", name, how == 's' ? "sensor saw it" : how == 'o' ? "closed by position" : "closed at the end of the curve", when);
 }
 
 // Distance-sensor resets at the stops a route already makes (on a goal, the
@@ -717,7 +719,7 @@ int resetAtStop() {
         ResetPreview p = previewReset(sensor);
         if (p.installed && p.ok && resetFrom(sensor)) fixed++;
     }
-    if (fixed) std::printf("Reset at stop: %d sensor(s), %u ms\n", fixed, static_cast<unsigned>(pros::millis() - start));
+    if (fixed) say("Reset at stop: %d sensor(s), %u ms\n", fixed, static_cast<unsigned>(pros::millis() - start));
     return fixed;
 }
 
@@ -748,11 +750,11 @@ void seatReset(Pt goalRed, double miss) {
     Pt g = at(goalRed);
     double heading = getInertialHeading(), h = heading * M_PI / 180;
     if (miss > SEAT_TRUST) {
-        std::printf("Goal seat: RW had the claw %.1f in from the goal, no reset\n", miss);
+        say("Goal seat: RW had the claw %.1f in from the goal, no reset\n", miss);
         return;
     }
     double nx = g.x - std::sin(h) * GOAL_SEAT, ny = g.y - std::cos(h) * GOAL_SEAT;
-    std::printf("Goal seat: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, nx, ny);
+    say("Goal seat: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, nx, ny);
     setPose(nx, ny, heading);
 }
 
@@ -805,7 +807,7 @@ void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via 
     }
     stackMayBeBehind = false;
     step("release");
-    std::printf("Scored on %s\n", name);
+    say("Scored on %s\n", name);
 }
 
 // Backs away from the goal it just scored on: `straight` inches straight back
@@ -880,7 +882,7 @@ void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool rev
             Pt b = at({x_pos, y_pos});  // red coordinates
             Pt fixed = std::fabs(std::sin(h)) > 0.7 ? Pt{centre.x, b.y} : Pt{b.x, centre.y};
             Pt f = at(fixed);
-            std::printf("Back on the wall: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, f.x, f.y);
+            say("Back on the wall: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, f.x, f.y);
             setPose(f.x, f.y, getInertialHeading());
         }
     } else {
@@ -921,14 +923,14 @@ void sideFlipTask(void*) {
         bool alongY = std::fabs(std::remainder(h, 180.0)) <= 6;        // heading north or south: beside the left or right wall
         if (alongX && std::fabs(y_pos) > WALL - HALF_WIDTH - 4) {
             double y = std::copysign(WALL - HALF_WIDTH, y_pos);
-            std::printf("Side on the wall: y %.2f -> %.2f\n", y_pos, y);
+            say("Side on the wall: y %.2f -> %.2f\n", y_pos, y);
             setPose(x_pos, y, h);
         } else if (alongY && std::fabs(x_pos) > WALL - HALF_WIDTH - 4) {
             double x = std::copysign(WALL - HALF_WIDTH, x_pos);
-            std::printf("Side on the wall: x %.2f -> %.2f\n", x_pos, x);
+            say("Side on the wall: x %.2f -> %.2f\n", x_pos, x);
             setPose(x, y_pos, h);
         } else {
-            std::printf("Side on the wall: not parallel or not near it (heading %.1f), no reset\n", h);
+            say("Side on the wall: not parallel or not near it (heading %.1f), no reset\n", h);
         }
     }
     setToggle(blue);
@@ -1170,7 +1172,7 @@ void lab() {
     const char* file = std::getenv("ROUTE_SCRIPT");
     std::ifstream in(file ? file : "");
     if (!in) {
-        std::printf("Lab: set ROUTE_SCRIPT to a route script\n");
+        say("Lab: set ROUTE_SCRIPT to a route script\n");
         return;
     }
     std::string line;
@@ -1186,7 +1188,7 @@ void lab() {
             for (size_t i = from; i < t.size(); i++) {
                 Via v;
                 if (labPoint(t[i], v)) pts.push_back(v);
-                else std::printf("Lab line %d: '%s' is not a point\n", number, t[i].c_str());
+                else say("Lab line %d: '%s' is not a point\n", number, t[i].c_str());
             }
             return pts;
         };
@@ -1251,7 +1253,7 @@ void lab() {
         } else if (c == "settle") {
             settle();
         } else {
-            std::printf("Lab line %d: don't understand '%s'\n", number, line.c_str());
+            say("Lab line %d: don't understand '%s'\n", number, line.c_str());
         }
     }
 }
@@ -1298,12 +1300,18 @@ void runAuton() {
     setPose(0, 0, 0);  // autons can override this
 #ifdef RW_SIM_PROS
     // In the simulator, RW's auton list picks (see registerSimAutons() in sim_checks.cpp).
+    runLogStart("simulator run");  // only writes if RUN_LOG_DIR is set
     runSelectedAuton();
 #else
+    // Every run is saved to the SD card, if there is one (runlog.hpp). Not the
+    // set-up runs: "Cal: drive log" writes its own file.
+    bool logged = std::strncmp(autons[selectedAuton].name, "Cal:", 4) != 0 && std::strcmp(autons[selectedAuton].name, "None") != 0;
+    if (logged) runLogStart(autons[selectedAuton].name);
     autons[selectedAuton].run();
 #endif
     // Routes end on a chained move, which leaves the motors running: stop.
     watchEnable(false);
     driveChassis(0, 0);
     stopChassis(pros::MotorBrake::hold);
+    runLogStop();
 }

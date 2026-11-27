@@ -12,9 +12,15 @@ runs to be off, and tune from there.
 - [ ] Bring: this Mac with the branch, a tape measure, an SD card in the brain,
       masking tape for marking where the robot stops.
 - [ ] Decide how the code gets onto the robot (this Mac, or push the branch).
-- [ ] Not written yet (tell Claude if you want them before practice):
-      - a brain-screen page that lists what is plugged into each port;
-      - logging auton runs to the SD card.
+- [ ] **SD card**: a microSD card formatted FAT32 (16 or 32 GB cards come that
+      way), in the brain before it is switched on. Every auton run then saves
+      itself to `run_NNN.csv` on the card: where the robot thought it was 20
+      times a second, the lift, the claw, the four distance sensors, and every
+      line the terminal would have shown. Nothing to turn on. Without a card
+      the robot drives the same and saves nothing. Don't pull the card out
+      while a program is running.
+- [ ] Not written yet (tell Claude if you want it before practice):
+      - a brain-screen page that lists what is plugged into each port.
 - [ ] **Rules to confirm in the current game manual** (Claude's copy is
       version 1.1 and marked obsolete):
       - May a drive team member hold the loader up while the robot takes a
@@ -220,8 +226,9 @@ terminal (it prints each step's time and what the claw sensor saw).
 
 - [ ] Every number you pasted (or just commit the files).
 - [ ] `rw_drive_log.csv`.
-- [ ] Terminal output of the auton runs, and where each run ended versus where
-      it should have.
+- [ ] Every `run_NNN.csv` from the SD card, with a note of which run was which
+      (the first line of each file names the auton) and where each run ended
+      versus where it should have. These replace copying the terminal output.
 - [ ] A video of one wall-stack grab from above, if you can.
 
 ## Autons in the code (simulator numbers)

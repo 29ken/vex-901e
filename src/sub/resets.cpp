@@ -1,4 +1,5 @@
 #include "resets.hpp"
+#include "runlog.hpp"
 #include "rw-config.h"
 #include "claw.hpp"
 #include "lift.hpp"
@@ -105,9 +106,9 @@ ResetPreview check(const Mount& m, double rawIn) {
 
 void report(const Mount& m, const char* why, double value = NAN, const char* unit = "") {
     if (std::isnan(value)) {
-        std::printf("Reset %-5s skipped: %s\n", m.name, why);
+        say("Reset %-5s skipped: %s\n", m.name, why);
     } else {
-        std::printf("Reset %-5s skipped: %s (%.1f %s)\n", m.name, why, value, unit);
+        say("Reset %-5s skipped: %s (%.1f %s)\n", m.name, why, value, unit);
     }
 }
 
@@ -182,7 +183,7 @@ static int resetWith(const std::vector<ResetSensor>& sensors) {
             report(m, "RW refused it");
             continue;
         }
-        std::printf("Reset %-5s %5.1f in: %c %.2f -> %.2f\n", m.name, p.readingIn, p.axis, oldPos,
+        say("Reset %-5s %5.1f in: %c %.2f -> %.2f\n", m.name, p.readingIn, p.axis, oldPos,
                     p.axis == 'x' ? x_pos : y_pos);
         used++;
     }

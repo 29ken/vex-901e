@@ -1,4 +1,5 @@
 #include "toggle.hpp"
+#include "runlog.hpp"
 #include "main.h"
 #include "config.hpp"
 #include <atomic>
@@ -84,7 +85,7 @@ static bool turnFlapper(double minTravel) {
             }
             pros::delay(5);
         }
-        if (!ok) std::printf("Toggle: the flapper didn't get round in %d ms (jammed, or the sensor isn't turning)\n", TOGGLE_FLIP_TIMEOUT_MS);
+        if (!ok) say("Toggle: the flapper didn't get round in %d ms (jammed, or the sensor isn't turning)\n", TOGGLE_FLIP_TIMEOUT_MS);
     }
     stopFlapper();
     flipping = false;
@@ -115,7 +116,7 @@ bool setToggle(bool blueAlliance) {
     ToggleColor ours = blueAlliance ? ToggleColor::Blue : ToggleColor::Red;
     bool done = false;
     if (!motor) {
-        std::printf("Toggle: ratchet motor not wired yet, waiting %d ms instead (%s)\n", TOGGLE_FLIP_MS,
+        say("Toggle: ratchet motor not wired yet, waiting %d ms instead (%s)\n", TOGGLE_FLIP_MS,
                     toggleColorName(ours));
         pros::delay(TOGGLE_FLIP_MS);
     } else {
@@ -124,13 +125,13 @@ bool setToggle(bool blueAlliance) {
             pros::delay(TOGGLE_SETTLE_MS);
             ToggleColor seen = toggleColor();
             if (seen == ToggleColor::Unknown) {
-                std::printf("Toggle: flipped; can't see a colour to check\n");
+                say("Toggle: flipped; can't see a colour to check\n");
                 done = true;
             } else if (seen == ours) {
-                std::printf("Toggle: %s after %d flip%s\n", toggleColorName(seen), flip, flip > 1 ? "s" : "");
+                say("Toggle: %s after %d flip%s\n", toggleColorName(seen), flip, flip > 1 ? "s" : "");
                 done = true;
             } else {
-                std::printf("Toggle: still %s after flip %d\n", toggleColorName(seen), flip);
+                say("Toggle: still %s after flip %d\n", toggleColorName(seen), flip);
             }
         }
     }

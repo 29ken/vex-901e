@@ -1,4 +1,5 @@
 #include "watch.hpp"
+#include "runlog.hpp"
 #include "main.h"
 #include "rw-config.h"
 #include "claw.hpp"
@@ -149,7 +150,7 @@ void loop() {
             for (Pose& p : history) p = {x_pos, y_pos, getInertialHeading()};
         }
         if (!on && wasOn) {
-            std::printf("Watch: end. x off by %+.2f in (%d readings), y off by %+.2f in (%d readings)\n", ax.off, ax.total, ay.off, ay.total);
+            say("Watch: end. x off by %+.2f in (%d readings), y off by %+.2f in (%d readings)\n", ax.off, ax.total, ay.off, ay.total);
         }
         wasOn = on;
         if (on) {
@@ -176,10 +177,10 @@ void loop() {
             std::uint32_t now = pros::millis();
             if (now - lastPrint >= static_cast<std::uint32_t>(PRINT_MS)) {
                 if (ax.believed || ay.believed) {
-                    std::printf("Watch %6.2f s: at (%.1f, %.1f)", now / 1000.0, x_pos, y_pos);
-                    if (ax.believed) std::printf("  x looks off by %+.2f in (%d readings)", ax.off, ax.believed);
-                    if (ay.believed) std::printf("  y looks off by %+.2f in (%d readings)", ay.off, ay.believed);
-                    std::printf("\n");
+                    say("Watch %6.2f s: at (%.1f, %.1f)", now / 1000.0, x_pos, y_pos);
+                    if (ax.believed) say("  x looks off by %+.2f in (%d readings)", ax.off, ax.believed);
+                    if (ay.believed) say("  y looks off by %+.2f in (%d readings)", ay.off, ay.believed);
+                    say("\n");
                 }
                 ax.believed = ay.believed = 0;
                 lastPrint = now;
@@ -233,15 +234,15 @@ int sensorCheckAtStop(const StopReadings& r, const char* where, double keepWithi
         const char* why = "";
         char axis = judge(m, p, r.inches[k], 0, error, why, maxJump);
         if (!axis) {
-            std::printf("Dist %s, %s: not used (%s)\n", where, m.name, why);
+            say("Dist %s, %s: not used (%s)\n", where, m.name, why);
             continue;
         }
         if (std::fabs(error) <= keepWithin) {
-            std::printf("Dist %s, %s %.1f in: %c agrees to %+.2f in\n", where, m.name, r.inches[k], axis, error);
+            say("Dist %s, %s %.1f in: %c agrees to %+.2f in\n", where, m.name, r.inches[k], axis, error);
             continue;
         }
         double nx = x_pos + (axis == 'x' ? error : 0), ny = y_pos + (axis == 'y' ? error : 0);
-        std::printf("Dist %s, %s %.1f in: %c %.2f -> %.2f\n", where, m.name, r.inches[k], axis,
+        say("Dist %s, %s %.1f in: %c %.2f -> %.2f\n", where, m.name, r.inches[k], axis,
                     axis == 'x' ? x_pos : y_pos, axis == 'x' ? nx : ny);
         setPose(nx, ny, p.heading);
         moved++;
