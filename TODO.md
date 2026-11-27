@@ -1,7 +1,7 @@
 # 901E practice plan (V4 robot)
 
-Branch `v4-cad-fixes` (local, not pushed). Work down the page in order: each
-step needs the ones before it. "Paste into" says which line of code a measured
+Branch `v4-ken` on GitHub (`main` is untouched). Work down the page in order:
+each step needs the ones before it. "Paste into" says which line of code a measured
 number replaces. Re-upload after each block of pasted numbers.
 
 Everything below was only ever run in the simulator. Expect the first real
@@ -15,6 +15,17 @@ runs to be off, and tune from there.
 - [ ] Not written yet (tell Claude if you want them before practice):
       - a brain-screen page that lists what is plugged into each port;
       - logging auton runs to the SD card.
+- [ ] **Rules to confirm in the current game manual** (Claude's copy is
+      version 1.1 and marked obsolete):
+      - May a drive team member hold the loader up while the robot takes a
+        piece? Match loading is designed around that.
+      - The custom plastic limit. The CAD has 13 custom polycarbonate pieces;
+        the old rule allows 12.
+      - The Autonomous Win Point conditions, including "neither robot
+        contacting the field perimeter" at the end.
+- [ ] **Fusion**: the front sleds are cut back flush with the drive channel and
+      the official loader is placed in front of the robot ("Loader check").
+      Neither edit is saved: save the document or undo them.
 
 ## 1. Ports and a first check (15 min)
 
@@ -65,6 +76,22 @@ Controller menu: X opens it, UP steps through it, A starts.
       `sh sim/fit-profile.sh rw_drive_log.csv`. Keep the file: Claude re-runs
       the route search against it so the simulator drives like our robot.
 
+How the pieces fit together (and where the robot's weight comes in):
+
+- **The drive model** (`drive_kS`, `drive_kV`, `drive_kA`, from
+  `Cal: feedforward`): how many volts give how much speed and acceleration. It
+  is measured on the real robot, so its weight is included. Run it again if
+  the weight changes much.
+- **The limits** (top speed, acceleration, cornering): how hard the routes may
+  push. They come from the drive log: the real top speed, how fast the robot
+  really speeds up, and whether the wheels slip. A heavier robot gets lower
+  limits. Most autons use 45 in/s and 100 in/s^2; the solo AWP needs 55 and
+  175, which no run on the robot has confirmed yet.
+- **The PIDs** (Turn PID, Move PID): corrections for what is left over. They
+  make moves land where they should; they do not make the robot faster. The
+  on-robot auto-tuner gives gains about ten times too high: tune by hand
+  (P, then D, then I) until it is fixed.
+
 ## 3. Lift and claw (20 min)
 
 - [ ] **Lift heights**: raise by hand with R2, read "Lift" on the brain screen.
@@ -86,7 +113,21 @@ Controller menu: X opens it, UP steps through it, A starts.
       distance at which the sensor sees a piece (`AUTOGRAB_MM` in `config.hpp`).
 - [ ] With the front of the robot flat on a wall and a wall stack in the claw,
       does the claw still close on it and centre it? (The stack sits 0.66 in
-      deeper than usual there.)
+      deeper than usual there. The sleds end flush with the frame now, so the
+      frame's own front corner is what touches the wall: watch the first grab,
+      aluminium may grip the wall more than plastic did.)
+- [ ] **Claw on a cup**: close the claw on a cup by hand. A cup is about 2.3 in
+      across at jaw height, an inch narrower than a pin's collar, and the CAD
+      only shows the jaws open.
+- [ ] **Match loading** (driver period): with a drive team member holding the
+      loader up, drive in and take a piece.
+      - The loader's black rail stays on the wall, 4.65 in wide and 1.3 in
+        out. The jaws meet it with the claw about 1.8 to 2.2 in from the wall,
+        and the piece sits 1.7 to 2.0 in out: it should reach, only just. The
+        robot stops about an inch off the wall, not against it.
+      - The Loader Aligner centres the robot to about an inch. The jaws need
+        closer than that, so finish lining up by eye.
+      - The aligner's flat plate has to flip up out of the raised loader's way.
 
 ## 4. Distance sensors (20 min)
 
@@ -150,8 +191,8 @@ terminal (it prints each step's time and what the claw sensor saw).
 - [ ] **Red Left 5** (5 pieces, sim: all on by 14.6 s, ends 14.7 s). Same
       tuning as Red Left 4. It has several aim points corrected by up to
       0.7 in in the simulator: expect to re-do those.
-- [ ] **Red Solo AWP**: run it after Red Left 4 works. Time the bottom-toggle
-      part on its own, and try the toggle side-on by hand to see what it needs.
+- [ ] **Red Solo AWP** (sim: ends 14.9 s): last, after Red Left 5 works and
+      the drive log has confirmed the faster limits. See "Solo AWP" below.
 - [ ] Blue versions: the same routes turned 180 degrees. Check one.
 - [ ] **Watch log**: every auton prints `Watch ...` lines (what the distance
       sensors think the position error is). It changes nothing. Save the
@@ -185,18 +226,29 @@ toggle is ours.
 ## Not done yet
 
 - [ ] **Solo AWP** (Worlds-qualifying: 7 halves, 3 goals with 2+, neither robot
-      on the wall). New route: ends 14.9 s in the simulator, 20 of 20 runs.
-      - The partner robot must start on the LEFT half of the bottom toggle and
-        roll forward off the wall during autonomous. This robot backs onto the
-        right half.
-      - It needs faster drive limits (`DriveLimits fast(55, 175)` in
-        `redSoloAwp`): 55 in/s and 175 in/s^2 against 45 and 100 elsewhere.
-        Bring back the drive log so these can be checked. If the robot can't
-        hold them, lower them: at 52 / 150 the route ends at 15.1 s.
-      - Re-find the aim point for the bottom-edge Cup+Pin (the hairpin pickup
-        before the bottom toggle). It is the least forgiving grab.
-      - Watch the back-in at the bottom toggle: the robot should end pressed
-        square on the wall ("Back on the wall" in the terminal).
+      on the wall). Ends 14.9 s in the simulator, 20 of 20 runs, margin 0.1 s.
+      - **Partner**: it must start on the LEFT half of the bottom toggle and
+        roll forward off the wall during autonomous (a partner that never
+        moves loses the win point). This robot backs onto the right half and
+        passes 1.5 in from where the partner would be after rolling 4 in.
+      - **Drive limits**: the route uses `DriveLimits fast(55, 175)` in
+        `redSoloAwp`. At 52 in/s and 150 in/s^2 it ends at 15.1 s; at 45 and
+        100, over 16 s. If the drive log shows the robot can't hold them,
+        lower them and expect the route to run long.
+      - **Hairpin pickup** (the bottom-edge Cup+Pin, picked up heading north
+        before reversing into the toggle): the least forgiving grab. Re-find
+        its aim point on the field.
+      - **Option to try: drive straight at that piece**, stop, turn on the
+        spot to face north, then reverse into the toggle. In the simulator it
+        takes the same time and the pickup is far more forgiving, but the
+        robot stopped 2.6 in short of the wall, so the flip did not count.
+        Test on the robot whether pressing back until the wheels stall puts
+        it on the wall every time; if so, tell Claude to switch to it.
+      - **Back-in at the bottom toggle**: the robot should end pressed square
+        on the wall and hold a light press through the flip ("Back on the
+        wall" in the terminal).
+      - **If the partner can flip the bottom toggle itself**, tell Claude:
+        this robot can then skip it, which is the biggest single saving left.
 - [x] **Red Left 5 under 15 s** in the simulator (ends 14.7 s). The margin is
       0.3 s and depends on the real lift, claw and toggle times.
 - [ ] **Goal-seat reset** (new, never run on the robot): every score presses
@@ -216,6 +268,11 @@ toggle is ours.
 
 ## Known limits
 
+- **The solo AWP has no slack.** Five deliveries and two toggles fill the 15 s:
+  it fits only at drive limits the robot has not shown yet, and with guessed
+  times for the toggle flip (0.6 s), the claw (0.15 s) and the lift.
+- **Goals are wider than the code assumes near the floor**: about 3.2 in from
+  the centre on the diagonals, where the code uses 2.81.
 - **V4 is long for the gap beside a goal.** Every wall stack sits in front of a
   goal. After a grab the robot spins 10.1 in from the wall with 0.3-0.4 in to
   the goal and the wall. Back corners at 9.43 in from the centre instead of
