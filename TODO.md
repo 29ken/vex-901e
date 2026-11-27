@@ -70,9 +70,19 @@ Controller menu: X opens it, UP steps through it, A starts.
 - [ ] **Cal dist**: push the robot exactly 48 in, press A.
       Paste into `rw-config.cpp`: `wheel_distance_in`.
 - [ ] **Turn PID**, then **Move PID**, by hand, with the two test autons in the
-      auton picker (Timed Run on the controller; about 5 s each, no pieces):
-      - **`Test: turn`** turns 90, back, 180, back. **`Test: drive`** drives
-        24 in forward and back, twice.
+      auton picker (no pieces needed):
+      - **`Test: turn`**: 90 right twice, 90 left twice, 180 right, 180 left,
+        350 right, 350 left, 25 right, 25 left, with a pause between. About
+        17 s, so run it in the controller's **Programming Skills** mode, not
+        Timed Run. (350 is as near a full circle as the library turns in one
+        move; 25 is the size of the routes' small aim corrections.)
+      - **`Test: drive`**: 24 in forward and back, twice. About 8 s; Timed Run
+        is fine.
+      - How teams tune (LemLib's and EZ-Template's guides agree): start with I
+        and D at 0; raise P until it overshoots and bounces once or twice;
+        raise D until the bounce stops; repeat, a little more P then more D,
+        until no amount of D stops it, then go back to the last good pair. Use
+        I only as a last resort, if it still ends short.
       - After each move the terminal (and the SD card) gets a line like
         `Test turn +90.0 deg: ended -0.65 deg off, overshot 0.00, settled
         within 1.0 deg after 0.47 s`.
