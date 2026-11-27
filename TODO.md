@@ -69,8 +69,22 @@ Controller menu: X opens it, UP steps through it, A starts.
       Paste into `rw-config.cpp`: `imu_scale`.
 - [ ] **Cal dist**: push the robot exactly 48 in, press A.
       Paste into `rw-config.cpp`: `wheel_distance_in`.
-- [ ] **Turn PID**, then **Move PID** (driver control enabled, room to move).
-      Paste the P/I/D from the brain screen into `rw-config.cpp`.
+- [ ] **Turn PID**, then **Move PID**, by hand, with the two test autons in the
+      auton picker (Timed Run on the controller; about 5 s each, no pieces):
+      - **`Test: turn`** turns 90, back, 180, back. **`Test: drive`** drives
+        24 in forward and back, twice.
+      - After each move the terminal (and the SD card) gets a line like
+        `Test turn +90.0 deg: ended -0.65 deg off, overshot 0.00, settled
+        within 1.0 deg after 0.47 s`.
+      - Change one number in `rw-config.cpp` (`turn_kp`, `turn_kd`, `turn_ki`
+        or `distance_kp`, `distance_kd`, `distance_ki`), upload, run again.
+        Raise P until it just overshoots, raise D until the overshoot is gone,
+        add a little I only if it keeps ending short. Aim for: overshoot under
+        about 1 deg / 0.3 in, and the shortest settle time.
+      - Don't use the numbers from the menu's Turn PID / Move PID auto-tuner:
+        they come out about ten times too high.
+      - `Test: drive` reports the distance the robot measures itself, so do
+        Cal dist first and check one run against a tape measure.
 - [ ] Auton **`Cal: feedforward`** (auton picker), 4 ft clear in front and
       behind. Copy the three numbers from the brain into `drive_kS`,
       `drive_kV`, `drive_kA` in `rw-config.cpp`. It never ends: stop the

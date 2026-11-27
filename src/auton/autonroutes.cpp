@@ -1102,6 +1102,118 @@ void calFeedforward() { measureDriveFeedforward(); }
 // saves rw_drive_log.csv to the SD card, or prints it to the terminal without one.
 void calDriveLog() { calibrateDrive(); }
 
+// ---- PID test moves (practice only) -------------------------------------------
+// One clean move at a time, so a PID can be judged in a few seconds without a
+// full route: how far off it ended, how far it overshot, and how long it took
+// to settle. A background task records the heading (or the distance driven)
+// every 10 ms while the move runs and for a moment after it.
+constexpr int TRACE_MAX = 600;            // 6 s
+constexpr int TEST_AFTER_MS = 400;        // keeps recording this long after the move returns
+constexpr double TEST_TURN_BAND = 1.0;    // degrees: "settled" once it stays inside this
+constexpr double TEST_DRIVE_BAND = 0.5;   // inches
+double traceValue[TRACE_MAX];
+std::atomic<int> traceCount{0};
+std::atomic<bool> traceOn{false};
+double (*traceRead)() = nullptr;
+bool traceTaskStarted = false;
+double testX0 = 0, testY0 = 0, testH0 = 0;
+
+void traceTask(void*) {
+    while (true) {
+        if (traceOn && traceRead) {
+            int n = traceCount;
+            if (n < TRACE_MAX) {
+                traceValue[n] = traceRead();
+                traceCount = n + 1;
+            }
+        }
+        pros::delay(10);
+    }
+}
+
+double readHeading() { return getInertialHeading(); }
+// Inches driven from where the test move started, along the way the robot faced then.
+double readDriven() {
+    double h = testH0 * M_PI / 180;
+    return (x_pos - testX0) * std::sin(h) + (y_pos - testY0) * std::cos(h);
+}
+
+// Runs `move`, which should take the reading from `from` to `to`, and prints what happened.
+template <typename Move>
+void testMove(const char* what, const char* unit, double from, double to, double band, double (*read)(), Move move) {
+    if (!traceTaskStarted) {
+        traceTaskStarted = true;
+        pros::Task task(traceTask, nullptr, "Test trace");
+    }
+    traceRead = read;
+    traceCount = 0;
+    traceOn = true;
+    std::uint32_t began = pros::millis();
+    move();
+    double returned = (pros::millis() - began) / 1000.0;
+    pros::delay(TEST_AFTER_MS);
+    traceOn = false;
+    int n = traceCount;
+    if (n < 2) {
+        say("Test %s: nothing recorded\n", what);
+        return;
+    }
+    double way = to >= from ? 1 : -1, goal = std::fabs(to - from);
+    double peak = -1e9;
+    int lastOutside = -1;
+    for (int i = 0; i < n; i++) {
+        double done = (traceValue[i] - from) * way;  // progress toward the target
+        peak = std::fmax(peak, done);
+        if (std::fabs(done - goal) > band) lastOutside = i;
+    }
+    double ended = (traceValue[n - 1] - from) * way - goal;  // + is past the target
+    double overshoot = std::fmax(0.0, peak - goal);
+    if (lastOutside == n - 1) {
+        say("Test %s %+.1f %s: ended %+.2f %s off, overshot %.2f, NOT settled within %.1f %s (move returned at %.2f s)\n",
+            what, goal * way, unit, ended, unit, overshoot, band, unit, returned);
+    } else {
+        say("Test %s %+.1f %s: ended %+.2f %s off, overshot %.2f, settled within %.1f %s after %.2f s (move returned at %.2f s)\n",
+            what, goal * way, unit, ended, unit, overshoot, band, unit, (lastOutside + 1) * 0.01, returned);
+    }
+}
+
+void testTurnTo(double target) {
+    double from = getInertialHeading();
+    // The IMU's heading keeps counting past 360, so aim at the same turn it will make.
+    double to = from + std::remainder(target - from, 360.0);
+    testMove("turn", "deg", from, to, TEST_TURN_BAND, readHeading, [target] { turnToAngle(target, 2000); });
+    pros::delay(400);
+}
+
+void testDriveBy(double inches) {
+    testX0 = x_pos;
+    testY0 = y_pos;
+    testH0 = getInertialHeading();
+    testMove("drive", "in", 0, inches, TEST_DRIVE_BAND, readDriven, [inches] { driveTo(inches, 2500); });
+    pros::delay(400);
+}
+
+// Turn PID: 90 right, back, 180, back. Needs room to spin; no pieces.
+// Tune turn_kp / turn_ki / turn_kd in rw-config.cpp from what it prints.
+void testTurn() {
+    say("Test: turn. Gains now: kp %.3f ki %.3f kd %.3f\n", turn_kp, turn_ki, turn_kd);
+    testTurnTo(90);
+    testTurnTo(0);
+    testTurnTo(180);
+    testTurnTo(0);
+}
+
+// Move PID: 24 in forward and back, twice. Needs 3 ft clear in front.
+// Tune distance_kp / distance_ki / distance_kd. The distance is what the robot
+// measures itself, so do Cal dist first, and check one run with a tape measure.
+void testDrive() {
+    say("Test: drive. Gains now: kp %.3f ki %.3f kd %.3f\n", distance_kp, distance_ki, distance_kd);
+    testDriveBy(24);
+    testDriveBy(-24);
+    testDriveBy(24);
+    testDriveBy(-24);
+}
+
 template <void (*Route)()>
 void asBlue() {
     blue = true;
@@ -1250,6 +1362,10 @@ void lab() {
             wallApproachNext = std::atof(t[1].c_str());
         } else if (c == "aim" && t.size() >= 2) {
             wallAimNext = std::atof(t[1].c_str());
+        } else if (c == "testturn") {
+            testTurn();
+        } else if (c == "testdrive") {
+            testDrive();
         } else if (c == "settle") {
             settle();
         } else {
@@ -1289,6 +1405,8 @@ const Auton autons[] = {
     // Practice set-up runs, not match autons (the simulator's list has no room for them).
     {"Cal: feedforward", calFeedforward},
     {"Cal: drive log", calDriveLog},
+    {"Test: turn", testTurn},
+    {"Test: drive", testDrive},
 #endif
 };
 const int autonCount = sizeof(autons) / sizeof(autons[0]);
