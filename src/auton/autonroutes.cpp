@@ -733,6 +733,8 @@ int resetAtStop() {
 constexpr double GOAL_SEAT = 6.0;
 constexpr double SEAT_TRUST = 3.0;
 constexpr double GOAL_SEAT_RESET = 1;  // 0 turns it off
+constexpr double DIST_CHECK_AT_SCORE = 1;  // 0 turns the distance-sensor check at each score off
+constexpr double DIST_KEEP_IN = 1.5;       // a sensor within this of the seat only confirms it
 constexpr double SEAT_PUSH_VOLTS = 3;  // the light press onto the goal while the claw opens
 // How far RW has the claw point from a goal (red coordinates) right now.
 double clawFromGoal(Pt goalRed) {
@@ -782,13 +784,26 @@ void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via 
     double arrived = clawFromGoal(goal);
     if (seat) driveChassis(SEAT_PUSH_VOLTS, SEAT_PUSH_VOLTS);
     else resetAtStop();  // the distance sensors want the robot still
-    stackMayBeBehind = false;
     std::uint32_t took = pros::millis() - opened;
+    // Pressed on the goal, read the distance sensors in what is left of the
+    // claw's opening time (no extra time): the same moment the no-tracker
+    // teams reset at. They are checked against the seat below.
+    bool check = seat && knob("DIST_CHECK", DIST_CHECK_AT_SCORE) > 0;
+    const std::uint32_t SAMPLE_MS = 90;  // 3 readings 40 ms apart, with 10 ms to spare
+    if (check && took + SAMPLE_MS < static_cast<std::uint32_t>(CLAW_OPEN_MS)) pros::delay(CLAW_OPEN_MS - SAMPLE_MS - took);
+    StopReadings readings{};
+    if (check) readings = sensorSampleAtStop();
+    took = pros::millis() - opened;
     if (took < static_cast<std::uint32_t>(CLAW_OPEN_MS)) pros::delay(CLAW_OPEN_MS - took);
     if (seat) {
         driveChassis(0, 0);
         seatReset(goal, arrived);
+        // The seat is the better reference (a fraction of an inch), so a sensor
+        // that agrees with it changes nothing. One that disagrees by more than
+        // DIST_KEEP_IN says the robot isn't really seated: then the sensor wins.
+        if (check) sensorCheckAtStop(readings, name, DIST_KEEP_IN, distance_reset_max_jump);
     }
+    stackMayBeBehind = false;
     step("release");
     std::printf("Scored on %s\n", name);
 }
@@ -1248,6 +1263,7 @@ void lab() {
 void labRoute() {
     profile_max_accel = knob("ACCEL", profile_max_accel);  // lab only: try other drive limits
     path_max_lateral_accel = knob("LAT", path_max_lateral_accel);
+    if (knob("MCL", 0) > 0) startMcl();  // lab only: RW's particle filter, to compare
     lab();
 }
 #endif

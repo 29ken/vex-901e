@@ -3,6 +3,7 @@
 #include "rw-config.h"
 #include "claw.hpp"
 #include "resets.hpp"
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -27,6 +28,13 @@ constexpr double GAIN = 0.2;               // how much of each believed reading 
 constexpr int LAG_TICKS = 4;               // a reading is about 40 ms old (10 ms ticks)
 constexpr int READ_EVERY = 3;              // the sensors update about every 33 ms
 constexpr int PRINT_MS = 250;
+constexpr double TOGGLE_HALF_IN = 12.9;    // a toggle is 25.8 in long, centred on its wall
+// The stop check (sensorCheckAtStop): how the public no-tracker teams use their
+// sensors. They read from 20 to about 48 in, robot stopped or pressed on something.
+constexpr double STOP_MAX_RANGE_IN = 48;
+constexpr int STOP_SAMPLES = 3;
+constexpr int STOP_SAMPLE_MS = 40;         // the sensors update about every 33 ms
+constexpr double STOP_MAX_SPREAD_IN = 1.5; // the samples have to agree, or something is moving in the beam
 
 struct Mount {
     const char* name;
@@ -78,7 +86,7 @@ double readInches(const Mount& m) {
 // One sensor, one reading, against the pose the robot had when it was taken.
 // Returns 'x' or 'y' and sets `error` (how far off the position looks along
 // that axis), or 0 with `why` when the reading isn't believed.
-char judge(const Mount& m, const Pose& p, double reading, double turnDps, double& error, const char*& why) {
+char judge(const Mount& m, const Pose& p, double reading, double turnDps, double& error, const char*& why, double agreeIn = AGREE_IN) {
     if (!m.sensor->is_installed()) { why = "unplugged"; return 0; }
     if (m.front && clawClosed()) { why = "claw closed"; return 0; }
     if (std::fabs(turnDps) > MAX_TURN_DPS) { why = "turning"; return 0; }
@@ -96,6 +104,12 @@ char judge(const Mount& m, const Pose& p, double reading, double turnDps, double
     double offSquare = std::acos(std::fmin(1.0, std::fabs(xWall ? bx : by))) * 180 / M_PI;
     if (offSquare > MAX_OFF_SQUARE_DEG) { why = "off square"; return 0; }
     if (predicted > m.maxRange) { why = "too far"; return 0; }
+    // The back sensor's lens is 7.95 in up and the toggles 10.7 in: from further
+    // out than BACK_MAX_RANGE_IN its beam catches a toggle, if it lands on one.
+    if (!m.front && m.facing == 180 && predicted > BACK_MAX_RANGE_IN) {
+        double along = xWall ? sy + by * predicted : sx + bx * predicted;
+        if (std::fabs(along) < TOGGLE_HALF_IN + predicted * std::tan(CONE_HALF_DEG * M_PI / 180)) { why = "toggle in the beam"; return 0; }
+    }
     // Anything that should still be standing inside the beam's cone, nearer than the wall.
     for (const Obstacle& o : obstacles) {
         if (o.gone) continue;
@@ -106,7 +120,7 @@ char judge(const Mount& m, const Pose& p, double reading, double turnDps, double
         if (across - o.r <= along * std::tan(CONE_HALF_DEG * M_PI / 180)) { why = "something in the beam"; return 0; }
     }
     if (reading <= 0) { why = "sees nothing"; return 0; }
-    if (std::fabs(reading - predicted) > AGREE_IN) { why = "doesn't agree"; return 0; }
+    if (std::fabs(reading - predicted) > agreeIn) { why = "doesn't agree"; return 0; }
     // A short reading means the robot is nearer that wall than it thinks.
     double towardWall = (predicted - reading) * std::cos(offSquare * M_PI / 180);
     error = towardWall * ((xWall ? bx : by) > 0 ? 1 : -1);
@@ -176,6 +190,64 @@ void loop() {
 }
 
 }  // namespace
+
+StopReadings sensorSampleAtStop() {
+    StopReadings r{};
+    pros::Distance* sensors[4] = {&front_sensor, &right_sensor, &back_sensor, &left_sensor};
+    double scale[4] = {SCALE_FRONT, SCALE_RIGHT, SCALE_BACK, SCALE_LEFT};
+    double got[4][STOP_SAMPLES];
+    for (int i = 0; i < STOP_SAMPLES; i++) {
+        if (i) pros::delay(STOP_SAMPLE_MS);
+        for (int k = 0; k < 4; k++) {
+            std::int32_t mm = sensors[k]->is_installed() ? sensors[k]->get() : PROS_ERR;
+            got[k][i] = (mm == PROS_ERR || mm <= 0 || mm >= 9999) ? -1 : mm / 25.4 * scale[k] * distance_sensor_scale;
+        }
+    }
+    for (int k = 0; k < 4; k++) {
+        double lo = 1e9, hi = -1e9;
+        bool blind = false;
+        for (double v : got[k]) {
+            if (v < 0) blind = true;
+            lo = std::fmin(lo, v);
+            hi = std::fmax(hi, v);
+        }
+        std::sort(got[k], got[k] + STOP_SAMPLES);
+        r.inches[k] = (blind || hi - lo > STOP_MAX_SPREAD_IN) ? -1 : got[k][STOP_SAMPLES / 2];
+    }
+    return r;
+}
+
+int sensorCheckAtStop(const StopReadings& r, const char* where, double keepWithin, double maxJump) {
+    Mount mounts[] = {
+        {"front", &front_sensor, front_sensor_offsetX, front_sensor_offsetY, 0, STOP_MAX_RANGE_IN, SCALE_FRONT, true},
+        {"right", &right_sensor, right_sensor_offsetX, right_sensor_offsetY, 90, STOP_MAX_RANGE_IN, SCALE_RIGHT, false},
+        {"back", &back_sensor, back_sensor_offsetX, back_sensor_offsetY, 180, STOP_MAX_RANGE_IN, SCALE_BACK, false},
+        {"left", &left_sensor, left_sensor_offsetX, left_sensor_offsetY, 270, STOP_MAX_RANGE_IN, SCALE_LEFT, false},
+    };
+    int moved = 0;
+    for (int k = 0; k < 4; k++) {
+        const Mount& m = mounts[k];
+        if (!m.sensor->is_installed()) continue;
+        Pose p{x_pos, y_pos, getInertialHeading()};  // each axis is judged after any earlier correction
+        double error = 0;
+        const char* why = "";
+        char axis = judge(m, p, r.inches[k], 0, error, why, maxJump);
+        if (!axis) {
+            std::printf("Dist %s, %s: not used (%s)\n", where, m.name, why);
+            continue;
+        }
+        if (std::fabs(error) <= keepWithin) {
+            std::printf("Dist %s, %s %.1f in: %c agrees to %+.2f in\n", where, m.name, r.inches[k], axis, error);
+            continue;
+        }
+        double nx = x_pos + (axis == 'x' ? error : 0), ny = y_pos + (axis == 'y' ? error : 0);
+        std::printf("Dist %s, %s %.1f in: %c %.2f -> %.2f\n", where, m.name, r.inches[k], axis,
+                    axis == 'x' ? x_pos : y_pos, axis == 'x' ? nx : ny);
+        setPose(nx, ny, p.heading);
+        moved++;
+    }
+    return moved;
+}
 
 void initWatch() {
 #ifdef RW_SIM_PROS

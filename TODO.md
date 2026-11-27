@@ -139,6 +139,23 @@ Brain screen, middle button = Distance page.
       `RIGHT` (the terminal prints the line ready to paste).
 - [ ] Offsets: put the robot at a known spot and check the page's x/y. If it
       is off, the sensor offsets in `rw-config.cpp` are wrong.
+- [ ] **When the sensors are used** (copied from how 360H, 2145Z and 3588Y use
+      theirs: robot stopped or pressed on something, square to the walls, one
+      sensor per axis):
+      - Red Left 4, Red Left 5 and the Solo AWP read all four sensors at every
+        score, while the robot is pressed on the goal and the claw opens (no
+        extra time). The goal seat sets the position; a sensor that agrees to
+        within 1.5 in changes nothing, and one that disagrees by 1.5 to 6 in
+        overrides the seat on its axis (the robot wasn't really seated).
+      - The terminal prints a `Dist ...` line per sensor at every score. Save
+        them: "agrees to +0.4 in" is the normal case; "not used (off square)"
+        means the robot scored at an angle, which most scores do.
+      - Readings are used out to 48 in at these stops (those teams use 20 to
+        48 in), and never through a wall stack, loader, goal or toggle that
+        should still be in the beam.
+      - Red Left 3, Red Right 2 and Skills use the older reset at their stops.
+      - RW's MCL stays off: in the simulator it made Red Left 5 miss a wall
+        stack, and RW's own notes say it has only been tried in simulation.
 - [ ] If the field has clear walls: try each sensor at 6, 12, 24, 36 in and at
       0, 10, 20, 30 degrees off square. Note where readings go wrong and set
       `RESET_MAX_OFF_SQUARE_DEG` in `resets.hpp` (12 now).

@@ -27,3 +27,18 @@ void watchEnable(bool on);
 void watchApply(bool on);
 // A piece the robot has taken (field coordinates): no longer in the way of a beam.
 void watchTaken(double x, double y);
+
+// Stop check: the way the public no-tracker teams use their distance sensors.
+// They reset with the robot stopped or pressed on something (after a turn to a
+// square heading, on a loader, on a goal), one sensor per axis, usually two at
+// once. Sample while the robot is still (about 70 ms, all four sensors at the
+// same moments), then check: a sensor whose reading passes the watch's rules is
+// compared with the robot's position along its axis. Within `keepWithin` the
+// position stays (the sensor only confirms it); further off, up to `maxJump`,
+// the position is set from the sensor. Returns how many axes it moved. Prints
+// one "Dist ..." line per sensor either way.
+struct StopReadings {
+    double inches[4];  // front, right, back, left; -1 = nothing usable
+};
+StopReadings sensorSampleAtStop();
+int sensorCheckAtStop(const StopReadings& readings, const char* where, double keepWithin, double maxJump);
