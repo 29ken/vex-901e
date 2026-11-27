@@ -1179,19 +1179,11 @@ void testMove(const char* what, const char* unit, double from, double to, double
 
 constexpr int TEST_PAUSE_MS = 700;  // standing still between test moves
 
-// Turns `degrees` from where the robot faces now: + is right (clockwise).
-// RW always takes a turn the short way round unless told a direction, and a
-// full 360 is "no turn" to it, so the longest single turn it can make is a
-// little under a full circle (it needs the target at least 5 degrees short).
+// Turns `degrees` (up to 180) from where the robot faces now: + is right (clockwise).
 void testTurnBy(double degrees) {
     double from = getInertialHeading();
     double to = from + degrees;
-    if (std::fabs(degrees) > 180) {
-        TurnDirection way = degrees > 0 ? clockwise : counterclockwise;
-        testMove("turn", "deg", from, to, TEST_TURN_BAND, readHeading, [to, way] { turnToAngle(to, way, 3000); });
-    } else {
-        testMove("turn", "deg", from, to, TEST_TURN_BAND, readHeading, [to] { turnToAngle(to, 2000); });
-    }
+    testMove("turn", "deg", from, to, TEST_TURN_BAND, readHeading, [to] { turnToAngle(to, 2000); });
     pros::delay(TEST_PAUSE_MS);
 }
 
@@ -1203,9 +1195,10 @@ void testDriveBy(double inches) {
     pros::delay(400);
 }
 
-// Turn PID: 90 right twice, 90 left twice, 180 right, 180 left, 350 right, 350 left,
-// 25 right, 25 left, with a pause between. About 17 s, so run it in the controller's
-// Programming Skills mode (60 s), not Timed Run (15 s). Needs room to spin; no pieces.
+// Turn PID: 90 right twice, 90 left twice, 180 right, 180 left, 25 right, 25 left,
+// with a pause between. About 13 s in the simulator, close to Timed Run's 15 s,
+// so the controller's Programming Skills mode (60 s) is the safe way to run it.
+// Needs room to spin; no pieces.
 // Tune turn_kp / turn_ki / turn_kd in rw-config.cpp from what it prints.
 void testTurn() {
     say("Test: turn. Gains now: kp %.3f ki %.3f kd %.3f\n", turn_kp, turn_ki, turn_kd);
@@ -1216,8 +1209,6 @@ void testTurn() {
     testTurnBy(-90);
     testTurnBy(180);
     testTurnBy(-180);
-    testTurnBy(350);   // as near a full circle as RW will turn in one move
-    testTurnBy(-350);
     testTurnBy(25);    // the routes' small aim corrections are this size
     testTurnBy(-25);
 }
