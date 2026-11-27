@@ -175,7 +175,7 @@ terminal (it prints each step's time and what the claw sensor saw).
 | Red/Blue Left 5 | preload, wall stack, corner Cup+Pin → red goal; Midfield Cup+Pin, other wall stack → black goal | 5 placed by 14.6 s, ends 14.7 s (20 of 20 runs) |
 | Red/Blue Right 2 | bottom toggle, preload, corner Cup+Pin → bottom red goal | 2 placed, ends 8.4 s |
 | Skills | Red Left 3, then the bottom toggle | 16.7 s of 60; the rest isn't planned |
-| Red/Blue Solo AWP | preload, Midfield-edge Cup+Pin → left black goal; Midfield Cup+Pin → red goal; bottom-edge Cup+Pin → bottom black goal; bottom toggle side-on; corner Cup+Pin → red goal | ends 16.2 s; at 15 s both toggles, 3 goals with 2+, 6 of 7 halves: the AWP is not met |
+| Red/Blue Solo AWP | preload, Midfield Cup+Pin → red goal; Midfield-edge Cup+Pin → left black goal; bottom-edge Cup+Pin carried into the bottom toggle (back-in), then → bottom black goal; wall stack → bottom black goal | ends 14.9 s at 55 in/s and 175 in/s² (20 of 20 runs); 15.1 s at 52 / 150 |
 | `Cal: feedforward`, `Cal: drive log` | set-up runs, not match autons | |
 
 "Placed" is pieces, not points: a Scored Pin is a visible pin half. Each black
@@ -184,16 +184,19 @@ toggle is ours.
 
 ## Not done yet
 
-- [ ] **Solo AWP** (Worlds-qualifying: 7 halves, 3 goals with 2+, both toggles,
-      off the wall). `Red Solo AWP` / `Blue Solo AWP` are practice routes. The
-      bottom toggle is flipped side-on while rolling along the wall. In the
-      simulator it ends at 16.2 s, 1.2 s too long: at 15 s it has both toggles,
-      three goals with 2+, and 6 of 7 halves.
-      - At practice: with the robot's side against a wall at a toggle, how far
-        off the wall can it be and still flip (the code assumes up to 1 in)?
-        Can it flip while rolling? How long does the flip take?
-      - The pass along the wall has ~0.3 in of room and nothing corrects the
-        robot's position there: it needs a distance-sensor reset before it.
+- [ ] **Solo AWP** (Worlds-qualifying: 7 halves, 3 goals with 2+, neither robot
+      on the wall). New route: ends 14.9 s in the simulator, 20 of 20 runs.
+      - The partner robot must start on the LEFT half of the bottom toggle and
+        roll forward off the wall during autonomous. This robot backs onto the
+        right half.
+      - It needs faster drive limits (`DriveLimits fast(55, 175)` in
+        `redSoloAwp`): 55 in/s and 175 in/s^2 against 45 and 100 elsewhere.
+        Bring back the drive log so these can be checked. If the robot can't
+        hold them, lower them: at 52 / 150 the route ends at 15.1 s.
+      - Re-find the aim point for the bottom-edge Cup+Pin (the hairpin pickup
+        before the bottom toggle). It is the least forgiving grab.
+      - Watch the back-in at the bottom toggle: the robot should end pressed
+        square on the wall ("Back on the wall" in the terminal).
 - [x] **Red Left 5 under 15 s** in the simulator (ends 14.7 s). The margin is
       0.3 s and depends on the real lift, claw and toggle times.
 - [ ] **Goal-seat reset** (new, never run on the robot): every score presses

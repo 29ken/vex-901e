@@ -392,6 +392,13 @@ constexpr double WALL_TURN_RADIUS = 7.5;  // the squaring curve's radius. TODO: 
 constexpr double WALL_AIM_SHIFT = 0;
 // An extra shift for the next wall stack only (same sign), set by a route just before it.
 double wallAimNext = 0;
+// The next wall stack only: the angle off square at which the corner meets the
+// wall (45 unless a route sets it). Steeper suits a stack that is right beside
+// the robot along the wall: it turns on the spot and drives a few inches.
+double wallApproachNext = 45;
+// The next wall stack only (flow approach): how close to the line-up point the
+// robot may start for that point to be left out of the curve.
+double wallLineupSkipNext = 0.75;
 // How far off square the robot is when it grabs a wall stack, degrees. The claw
 // point is 0.89 in inside the frame's front and a stack is 1.55 in off the
 // wall, so square on the wall the stack is 0.66 in too deep in the claw. With
@@ -432,9 +439,11 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
     // The front corner on the come-from side, on the wall: what it turns about.
     Pt pivot{square.x + toWall.x * FRONT + along.x * HALF_WIDTH, square.y + toWall.y * FRONT + along.y * HALF_WIDTH};
     // The square pose turned 45 degrees back about that corner: where the corner first touches.
-    double contactHeading = faceWall - fromSide * 45;
+    double approachDeg = wallApproachNext;  // how far off square the robot is when its corner meets the wall
+    wallApproachNext = 45;
+    double contactHeading = faceWall - fromSide * approachDeg;
     Pt v{square.x - pivot.x, square.y - pivot.y};
-    double r = -fromSide * 45 * M_PI / 180;  // compass turn, clockwise positive
+    double r = -fromSide * approachDeg * M_PI / 180;  // compass turn, clockwise positive
     Pt contact{pivot.x + v.x * std::cos(r) + v.y * std::sin(r), pivot.y - v.x * std::sin(r) + v.y * std::cos(r)};
     double c = contactHeading * M_PI / 180;
     Pt lineup{contact.x - std::sin(c) * WALL_LINEUP, contact.y - std::cos(c) * WALL_LINEUP};
@@ -451,7 +460,10 @@ void grabWallStack(Pt stack, double faceWall, int fromSide, const char* name, do
         // toggle pass): the turn about that corner is 90 degrees, not 45.
         step("alongside the wall");
     } else if (flow) {
-        via.push_back({lineup.x, lineup.y, 0.6});
+        // Starting on (or near) the line-up point, the slow-down there is skipped:
+        // the robot is already where that point would put it.
+        if (distanceTo(l) > wallLineupSkipNext) via.push_back({lineup.x, lineup.y, 0.6});
+        wallLineupSkipNext = 0.75;
         via.push_back({past.x, past.y, 0.25});
         curve(via, false, true, 45);
         step("to the wall stack");
@@ -599,7 +611,7 @@ void score(Pt goal, double liftHeight, const char* name) {
 // where it has to: on a goal, to let go of the piece, and at a wall stack.
 // RW's path follower needs the drive's feedforward measured on the real robot
 // (measureDriveFeedforward(), rw-config.cpp) before these speeds mean anything.
-const double TOP_IPS = knob("TOP_IPS", 45);       // top path speed, in/s (RW's default for this drive: 80% of free speed)
+double TOP_IPS = knob("TOP_IPS", 45);       // top path speed, in/s (RW's default for this drive: 80% of free speed)
 constexpr double GRAB_IPS = 12;      // speed through a piece while the claw closes. 15 saved ~0.05 s a grab in the simulator but left grabs 1.34 in off-centre (limit 1.42). TODO: practice
 constexpr double GRAB_SLOW = 4;      // already at GRAB_IPS this far before the piece
 constexpr double GRAB_LEAD = 1.5;    // the position backup closes the claw this far before the piece is at the claw point (about GRAB_IPS x CLAW_CLOSE_MS)
@@ -608,6 +620,24 @@ constexpr double SCORE_SLOW = 8;     // the last stretch into a goal starts this
 constexpr double SCORE_SLOW_SPEED = 0.45;  // ...at this fraction of TOP_IPS
 constexpr double LIFT_CLEAR = 2;     // the open claw is clear of a piece it let go this far back. TODO: practice
 constexpr double SCORE_PAST = 0.5;   // aims this far past the stop: RW's follower stops up to 1 in short
+
+// Faster drive limits for one route, put back when the route ends. TOP_IPS is
+// the top path speed and RW's profile_max_accel how hard it speeds up and
+// slows down (100 in/s^2 by default). The drive's free speed is about 65 in/s,
+// so these are within reach on paper, but nothing above 45 / 100 has been run
+// on the robot: check them against the drive log before trusting a route that
+// needs them. The simulator can still override both (TOP_IPS, ACCEL).
+struct DriveLimits {
+    double top = TOP_IPS, accel = profile_max_accel;
+    DriveLimits(double topIps, double accelIps2) {
+        TOP_IPS = knob("TOP_IPS", topIps);
+        profile_max_accel = knob("ACCEL", accelIps2);
+    }
+    ~DriveLimits() {
+        TOP_IPS = top;
+        profile_max_accel = accel;
+    }
+};
 
 // Drives a smooth curve from where the robot is through `pts`. reverse: driving
 // backwards. stop: stops at the last point (otherwise it arrives rolling and the
@@ -798,13 +828,17 @@ void gapBack(Pt goal) {
 // wall (a toggle only counts once no robot touches it, and for the Autonomous
 // Win Point the robot must not end touching the wall).
 constexpr double TOGGLE_LINEUP = 10;
+constexpr double TOGGLE_LINEUP_REVERSE = 7;  // coming tail first it is already lined up: a shorter slow stretch
+constexpr double TOGGLE_PRESS_VOLTS = 4;     // the press onto the wall after reversing in
+constexpr int TOGGLE_PRESS_MS = 40;         // pressing before the flapper starts; the press then holds through the flip
 constexpr double TOGGLE_ROLL_OFF = 2;  // off the wall and off the toggle afterwards. TODO: practice (does the flapper clear it?)
 // reverseIn: the robot comes tail first (a reverse curve through `via`), so it
 // keeps rolling backwards onto the wall with no stop and no turn in front of it.
 // With its back flat on the wall it also knows its distance from that wall.
-void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool reverseIn = false) {
+void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool reverseIn = false, bool rollOff = true) {
     double h = heading * M_PI / 180;
-    Pt front{centre.x + std::sin(h) * TOGGLE_LINEUP, centre.y + std::cos(h) * TOGGLE_LINEUP};
+    double lineup = reverseIn ? knob("TOG_LINEUP", TOGGLE_LINEUP_REVERSE) : TOGGLE_LINEUP;
+    Pt front{centre.x + std::sin(h) * lineup, centre.y + std::cos(h) * lineup};
     if (reverseIn) {
         via.push_back({front.x, front.y, 0.45});
         curve(via, true, false, TOP_IPS);
@@ -816,17 +850,29 @@ void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool rev
     }
     step("to the toggle");
     Pt wall = at({centre.x - std::sin(h) * 0.5, centre.y - std::cos(h) * 0.5});
-    moveToPoint(wall.x, wall.y, -1, msFor(TOGGLE_LINEUP), true, 9);
-    if (reverseIn && std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) <= 4) {
-        // Back flat on the wall: the centre is BACK from it. Set that coordinate, keep the other.
-        Pt b = at({x_pos, y_pos});  // red coordinates
-        Pt fixed = std::fabs(std::sin(h)) > 0.7 ? Pt{centre.x, b.y} : Pt{b.x, centre.y};
-        Pt f = at(fixed);
-        std::printf("Back on the wall: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, f.x, f.y);
-        setPose(f.x, f.y, getInertialHeading());
+    moveToPoint(wall.x, wall.y, -1, msFor(lineup), true, 9);
+    if (reverseIn) {
+        // The move can stop up to an inch short, so press the back onto the wall
+        // and keep a light press on through the flip: the flapper has to reach
+        // the toggle and its push must not walk the robot off the wall. The
+        // wheels may creep while pressing, so the position is set afterwards.
+        driveChassis(-TOGGLE_PRESS_VOLTS, -TOGGLE_PRESS_VOLTS);
+        pros::delay(static_cast<int>(knob("TOG_PRESS_MS", TOGGLE_PRESS_MS)));
+        setToggle(blue);
+        driveChassis(0, 0);
+        if (std::fabs(std::remainder(getInertialHeading() - turned(heading), 360.0)) <= 4) {
+            // Back flat on the wall: the centre is BACK from it. Set that coordinate, keep the other.
+            Pt b = at({x_pos, y_pos});  // red coordinates
+            Pt fixed = std::fabs(std::sin(h)) > 0.7 ? Pt{centre.x, b.y} : Pt{b.x, centre.y};
+            Pt f = at(fixed);
+            std::printf("Back on the wall: (%.2f, %.2f) -> (%.2f, %.2f)\n", x_pos, y_pos, f.x, f.y);
+            setPose(f.x, f.y, getInertialHeading());
+        }
+    } else {
+        setToggle(blue);
     }
-    setToggle(blue);
     step("toggle");
+    if (!rollOff) return;  // the next move drives forward off the wall anyway
     driveTo(TOGGLE_ROLL_OFF, msFor(TOGGLE_ROLL_OFF));
     step("off the wall");
 }
@@ -961,20 +1007,24 @@ void redLeft5() {
 }
 
 // Solo Autonomous Win Point, Worlds-qualifying criteria: 7 visible pin halves,
-// 3 goals with 2 or more each, both of our toggles ours, off the wall at the end.
-// Each black goal starts with a yellow pin (1 half once its toggle is ours), so
-// the robot adds the preload and four loose Cup+Pins: red goal 3, left black
-// goal 2, bottom black goal 2. No wall stacks. The bottom toggle is flipped
-// side-on (sideToggle) on the way back west along the bottom wall.
-// NOT IN TIME YET: in the simulator it ends at 16.2 s. At 15 s it has both
-// toggles, three goals with 2 or more, and 6 of the 7 halves: the corner
-// Cup+Pin goes on the red goal at 16.0 s. Getting alongside the bottom wall
-// from the bottom black goal costs a stop and a turn (about 1 s). The pass
-// along the wall has about +-0.3 in of room and RW is 0.5-0.8 in out there,
-// so it needs a distance reset before it can be trusted. Several aim points
-// are corrected by 1-2.4 in for the simulator: re-measure them on the field.
+// 3 goals with 2 or more each, neither robot touching the wall at the end.
+// Each black goal starts with a yellow pin (1 half once its quadrant's toggle
+// is ours), so both toggles are flipped: the left one at the start, the bottom
+// one by backing in. Red goal 2 (preload + a Cup+Pin), left black goal 2, bottom
+// black goal 3 (two Cup+Pins).
+// The partner robot starts on the bottom wall too. This route assumes it sits
+// on the LEFT half of the bottom toggle (x from about -21.5 to -3.5) and rolls
+// forward off the wall during autonomous; the robot passes 1.5 in from where a
+// partner that rolled 4 in forward would be. It backs onto the right half.
+// It needs faster drive limits than the other routes (DriveLimits below): at
+// 52 in/s and 150 in/s^2 it ends at 15.1 s, at 45 and 100 well over 16.
+// The pickup before the toggle is a hairpin and the least forgiving grab: its
+// aim point is tuned to the simulator and must be re-found on the field.
 void redSoloAwp() {
-    // preload -> RG, ME -> BG, YN -> RG, M2 -> BK2, bottom toggle side-on, YF -> RG.
+    // Partner on the left half of the bottom toggle; this robot backs in on the right half.
+    // preload -> RG, ME -> BG, YN -> RG, M2 picked up and carried into the bottom toggle,
+    // M2 -> BK2, W4 -> BK2. Simulator at these drive limits: ends 14.95 s, 20 of 20 runs.
+    DriveLimits fast(55, 175);
     startAtToggle({-WALL + BACK, -6}, 90, LIFT_ALLIANCE_GOAL, false);
     scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL, "alliance goal (preload)", {{-55.8, -9}});
     backAway(4, {{-55, -10}});
@@ -985,14 +1035,15 @@ void redSoloAwp() {
     take({-24.6, -25.5}, "yellow Cup+Pin by the Midfield", LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, {{-27, -10}});
     scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + LIFT_PER_PIECE, "alliance goal", {{-26, -33}, {-34, -31}});
     backAway(5, {{-38, -33}, {-40, -36}});
-    take({-3.7, -23.6}, "Cup+Pin at the Midfield's bottom edge", LIFT_NEUTRAL_GOAL, {{-30, -31}, {-16, -27}});
-    scoreOn(BLACK_GOAL_BOTTOM, LIFT_NEUTRAL_GOAL, "bottom black goal", {{8, -34}});
-    backAway(4, {{15, -37}});
-    curve({{13, -48}, {14.5, -53, 0.75}, {14.8, -57, 0.45}}, false, true, TOP_IPS);
-    turnToAngle(turned(251), 900);
-    sideToggle({-0.5, -63.6}, {{8.5, -62, 0.5}, {1.5, -63.6, 0.27}, {-5.5, -63.6, 0.24}, {-13, -62.9, 0.7}, {-25, -59}});
-    take({-47.2, -48.4}, "yellow Cup+Pin by the corner", LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, {{-34, -55}});
-    scoreOn(RED_GOAL_LEFT, LIFT_ALLIANCE_GOAL + 2 * LIFT_PER_PIECE, "alliance goal", {{-50, -38}});
+    take({-7.2, -25.7}, "Cup+Pin", LIFT_NEUTRAL_GOAL, {{-22, -36}, {2, -39.5}});
+    flipToggleAt({6, -62.61}, 0, {{4, -40}, {6, -48}}, true, false);
+    scoreOn(BLACK_GOAL_BOTTOM, LIFT_NEUTRAL_GOAL, "bottom black goal", {{9, -55.8}});
+    backAway(4, {{8.25, -51}});
+    wallAimNext = 0.25;
+    wallLineupSkipNext = 4;
+    grabWallStack(STACK_BY_BLACK_GOAL_BOTTOM, 180, +1, "wall stack by the bottom black goal", LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, true);
+    turnToAngle(turned(0), 900);
+    scoreOn(BLACK_GOAL_BOTTOM, LIFT_NEUTRAL_GOAL + LIFT_PER_PIECE, "bottom black goal");
 }
 
 // Bottom Quadrant: toggle, preload and the corner Cup+Pin on the red goal.
@@ -1170,10 +1221,16 @@ void lab() {
             liftTo(labLift(t[1]));
         } else if (c == "toggle" && t.size() >= 4) {
             bool rev = t.size() > 4 && t[4] == "rev";
-            flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(rev ? 5 : 4), rev);
+            bool roll = t.back() != "noroll";
+            if (!roll) t.pop_back();
+            flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(rev ? 5 : 4), rev, roll);
         } else if (c == "sidetoggle" && t.size() >= 4) {
             bool ram = t.size() > 3 && t[3] == "ram";
             sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(ram ? 4 : 3), ram);
+        } else if (c == "skipnear" && t.size() >= 2) {
+            wallLineupSkipNext = std::atof(t[1].c_str());
+        } else if (c == "approach" && t.size() >= 2) {
+            wallApproachNext = std::atof(t[1].c_str());
         } else if (c == "aim" && t.size() >= 2) {
             wallAimNext = std::atof(t[1].c_str());
         } else if (c == "settle") {
@@ -1188,7 +1245,11 @@ void lab() {
 }  // namespace
 
 #ifdef RW_SIM_PROS
-void labRoute() { lab(); }
+void labRoute() {
+    profile_max_accel = knob("ACCEL", profile_max_accel);  // lab only: try other drive limits
+    path_max_lateral_accel = knob("LAT", path_max_lateral_accel);
+    lab();
+}
 #endif
 
 // The brain screen's selector lists these in order; runAuton() runs the one picked.
