@@ -673,24 +673,8 @@ void backAway(double straight, std::vector<Via> then) {
     step("back away");
 }
 
-// For the gap between a goal and the wall, where there's no room for a reverse
-// curve: the slow straight back-off to where the robot can turn, then stopped.
-void gapBack(Pt goal) {
-    driveTo(-LIFT_CLEAR, msFor(LIFT_CLEAR), false, GAP_VOLTS);  // the open claw clears the piece, then the lift starts down
-    liftTo(LIFT_GRAB);
-    backOffToTurn(at(goal));
-    step("back off (gap)");
-}
-
-// Turns on the spot to face a point (red coordinates). Only from a stop.
-void faceTo(Pt p) {
-    turnOnSpotNext = false;
-    aimAt(at(p));
-    step("turn");
-}
-
 // ============================================================================
-// Flipping a second toggle: backing onto it, or side-on
+// Flipping a second toggle: backing onto it
 // ============================================================================
 
 // Flips a second toggle (red coordinates for its place on the wall, as in
@@ -746,58 +730,6 @@ void flipToggleAt(Pt centre, double heading, std::vector<Via> via, bool reverseI
     if (!rollOff) return;  // the next move drives forward off the wall anyway
     driveTo(TOGGLE_ROLL_OFF, msFor(TOGGLE_ROLL_OFF));
     step("off the wall");
-}
-
-// Flips a toggle side-on while driving past it. V4 has a side flap on each
-// side of the toggle shaft (CAD: 6.05-7.55 in from the centre line, so 1.35 in
-// past the frame's side, and 6.4-7.1 in behind the robot's centre). With the
-// robot alongside the wall and its side within about an inch of it, that flap
-// is over the toggle. The curve through `pts` (red coordinates) should run
-// along the wall, slowly, about SIDE_GAP off it; the flip starts when the
-// robot's centre comes within 3 in of `where` and takes TOGGLE_FLIP_MS, during
-// which the flap (SIDE_FLAP_BEHIND behind the centre) has to stay over the
-// toggle (25.8 in long, centred on the wall). Ends rolling. Untested on the
-// robot: how close the side has to be, and whether it can flip while moving.
-constexpr double SIDE_FLAP_BEHIND = 6.75;
-Pt sideFlipWhere{0, 0};
-std::atomic<bool> sideFlipBusy{false};
-// ram: the curve is aimed a little into the wall, so the robot meets it at a
-// shallow angle and slides along it on its side sleds (the wall also turns it
-// parallel). When the flip starts and the robot is within 6 degrees of
-// parallel, its side is taken to be on the wall, which gives its distance
-// from that wall exactly (HALF_WIDTH). Keep the angle shallow (10-20 degrees):
-// at 30 in/s and 15 degrees only 8 in/s goes into the wall.
-bool sideFlipRam = false;
-void sideFlipTask(void*) {
-    std::uint32_t began = pros::millis();
-    while (distanceTo(sideFlipWhere) > 3 && pros::millis() - began < 6000) pros::delay(10);
-    if (sideFlipRam) {
-        double h = getInertialHeading();
-        bool alongX = std::fabs(std::remainder(h - 90, 180.0)) <= 6;   // heading east or west: beside the bottom or top wall
-        bool alongY = std::fabs(std::remainder(h, 180.0)) <= 6;        // heading north or south: beside the left or right wall
-        if (alongX && std::fabs(y_pos) > WALL - HALF_WIDTH - 4) {
-            double y = std::copysign(WALL - HALF_WIDTH, y_pos);
-            say("Side on the wall: y %.2f -> %.2f\n", y_pos, y);
-            setPose(x_pos, y, h);
-        } else if (alongY && std::fabs(x_pos) > WALL - HALF_WIDTH - 4) {
-            double x = std::copysign(WALL - HALF_WIDTH, x_pos);
-            say("Side on the wall: x %.2f -> %.2f\n", x_pos, x);
-            setPose(x, y_pos, h);
-        } else {
-            say("Side on the wall: not parallel or not near it (heading %.1f), no reset\n", h);
-        }
-    }
-    setToggle(blue);
-    step("toggle");
-    sideFlipBusy = false;
-}
-void sideToggle(Pt where, const std::vector<Via>& pts, bool ram) {
-    sideFlipWhere = at(where);
-    sideFlipRam = ram;
-    sideFlipBusy = true;
-    pros::Task flip(sideFlipTask, nullptr, "Side toggle");
-    curve(pts, false, false, TOP_IPS);
-    step(ram ? "along the toggle (on the wall)" : "along the toggle");
 }
 
 }  // namespace auton

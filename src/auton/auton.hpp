@@ -225,12 +225,9 @@ double clawFromGoal(Pt goalRed);
 void seatReset(Pt goalRed, double miss);
 void scoreOn(Pt goal, double liftHeight, const char* name, std::vector<Via> via = {});
 void backAway(double straight, std::vector<Via> then = {});
-void gapBack(Pt goal);
-void faceTo(Pt p);
 
 // ---- moves.cpp: second toggle ----------------------------------------------------
 void flipToggleAt(Pt centre, double heading, std::vector<Via> via = {}, bool reverseIn = false, bool rollOff = true);
-void sideToggle(Pt where, const std::vector<Via>& pts, bool ram = false);
 
 // ---- routes.cpp ------------------------------------------------------------------
 void none();

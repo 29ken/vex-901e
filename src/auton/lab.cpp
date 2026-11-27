@@ -21,12 +21,9 @@ namespace auton {
 //   wall STACK FACE SIDE LIFT [flow] [PT ...]   grabWallStack (flow: a curved approach through the points)
 //   aim X                               shifts the next wall stack's aim X in along the wall (wallAimNext)
 //   curve [rev] [stop] PT ...           a plain curve
-//   gapback GOAL                        backOffToTurn: the slow back-off for between a goal and a wall
-//   face PT / turn HEADING              turn on the spot
+//   turn HEADING                        turn on the spot
 //   oldscore GOAL LIFT / oldtake PIECE LIFT   the stop-and-go helpers
 //   toggle X Y HEADING [PT ...]         flipToggleAt: a second toggle (bottom: toggle -6 -62.61 0)
-//   sidetoggle X Y [ram] PT ...         sideToggle (ram: slides along the wall on purpose)
-//   (old form) sidetoggle X Y PT ...    sideToggle: flips side-on, starting when the centre is within 3 in of X,Y
 //   wait MS / lift LIFT / settle
 // PT is x,y or x,y,speed. GOAL: RG RGB BG or x,y. PIECE: YF YN ME or x,y.
 // STACK: W1 W2. LIFT: GRAB CARRY A0 A1 A2 N0 N1 or a number.
@@ -124,10 +121,6 @@ void lab() {
             for (; i < t.size() && (t[i] == "rev" || t[i] == "stop"); i++) (t[i] == "rev" ? rev : stop) = true;
             curve(points(i), rev, stop, TOP_IPS);
             step("curve");
-        } else if (c == "gapback" && t.size() >= 2 && labPoint(t[1], target)) {
-            gapBack({target.x, target.y});
-        } else if (c == "face" && t.size() >= 2 && labPoint(t[1], target)) {
-            faceTo({target.x, target.y});
         } else if (c == "turn" && t.size() >= 2) {
             turnToAngle(turned(std::atof(t[1].c_str())), 900, knob("TURN_EXIT", 1) > 0);
             step("turn");
@@ -140,9 +133,6 @@ void lab() {
             bool roll = t.back() != "noroll";
             if (!roll) t.pop_back();
             flipToggleAt({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, std::atof(t[3].c_str()), points(rev ? 5 : 4), rev, roll);
-        } else if (c == "sidetoggle" && t.size() >= 4) {
-            bool ram = t.size() > 3 && t[3] == "ram";
-            sideToggle({std::atof(t[1].c_str()), std::atof(t[2].c_str())}, points(ram ? 4 : 3), ram);
         } else if (c == "skipnear" && t.size() >= 2) {
             wallLineupSkipNext = std::atof(t[1].c_str());
         } else if (c == "approach" && t.size() >= 2) {
