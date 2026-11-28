@@ -119,6 +119,10 @@ bool setToggle(bool blueAlliance) {
         std::printf("Toggle: ratchet motor not wired yet, waiting %d ms instead (%s)\n", TOGGLE_FLIP_MS,
                     toggleColorName(ours));
         pros::delay(TOGGLE_FLIP_MS);
+    } else if (toggleColor() == ours) {
+        // Look first: already our colour, so leave it alone.
+        std::printf("Toggle: already %s, not flipped\n", toggleColorName(ours));
+        done = true;
     } else {
         for (int flip = 1; flip <= TOGGLE_MAX_FLIPS && !done; flip++) {
             if (!turnFlapper(TOGGLE_FLAP_SPACING)) break;

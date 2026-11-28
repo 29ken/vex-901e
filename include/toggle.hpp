@@ -30,9 +30,11 @@ enum class ToggleColor { Unknown, Red, Blue, Yellow };
 // Call once from initialize().
 void initToggle();
 
-// Turns the flapper one flip, then looks at the field toggle with the optical
-// sensor. If it can see the toggle and it isn't our colour, flips again (up to
-// TOGGLE_MAX_FLIPS in all). Returns true if it saw our colour, or flipped but
+// Looks at the field toggle with the optical sensor first: if it is already
+// our colour, nothing turns. Otherwise (another colour, or it can't tell) it
+// turns the flapper one flip and looks again; if it can see the toggle and it
+// still isn't our colour, flips again (up to TOGGLE_MAX_FLIPS in all).
+// Returns true if it saw our colour, or flipped but
 // couldn't see a colour to check; false if it never got our colour, the
 // flapper jammed, or the motor isn't wired. Blocks until done.
 bool setToggle(bool blueAlliance);
