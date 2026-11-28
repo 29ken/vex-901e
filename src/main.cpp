@@ -67,12 +67,12 @@ void opcontrol() {
             clawToggle();
         }
 
-        // 4. Toggle (include/toggle.hpp). R1, one press: flip the toggle next
-        // to the flapper to our colour. R2, held: turn the flapper by hand.
+        // 4. Toggle (include/toggle.hpp). R1: flips the toggle next to the
+        // flapper to our colour if it isn't already. Held, it keeps watching
+        // and flips it back whenever it stops being ours. R2, held: turns the
+        // flapper by hand.
         toggleManual(master.get_digital(pros::E_CONTROLLER_DIGITAL_R2));
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
-            setToggleAsync(blueAlliance());
-        }
+        toggleHold(master.get_digital(pros::E_CONTROLLER_DIGITAL_R1), blueAlliance());
 
         pros::delay(10);  // inside da loop
     }

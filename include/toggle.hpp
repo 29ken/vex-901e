@@ -41,6 +41,11 @@ bool setToggle(bool blueAlliance);
 // The same, without waiting (for the driver's button). Does nothing if a flip
 // is already going.
 void setToggleAsync(bool blueAlliance);
+// R1, called every loop with whether it is held. A press does what
+// setToggle() does (look, and flip if the toggle isn't ours). For as long as
+// R1 stays held it keeps looking, and if the toggle turns to a colour that
+// isn't ours (an opponent flipped it) it flips it back straight away.
+void toggleHold(bool held, bool blueAlliance);
 // R2, called every loop with whether it is held: turns the flapper (the same
 // way a flip does, so the lift doesn't move) for as long as it is. Ignored
 // while an automatic flip is running.
@@ -87,6 +92,10 @@ inline constexpr int TOGGLE_FLIP_TIMEOUT_MS = 2000;   // gives up: jammed, or th
 inline constexpr int TOGGLE_MAX_FLIPS = 2;
 // After a flip, how long the field toggle gets to settle before its colour is read.
 inline constexpr int TOGGLE_SETTLE_MS = 120;
+// While R1 is held: how often the colour is read, and how many readings in a
+// row must show a colour that isn't ours before it flips (3 x 20 ms = 0.06 s).
+inline constexpr int TOGGLE_HOLD_MS = 20;
+inline constexpr int TOGGLE_HOLD_READS = 3;
 
 // Optical sensor: what counts as a colour. TODO: hold each toggle colour in
 // front of the sensor at practice and read "Toggle" on the brain screen.
