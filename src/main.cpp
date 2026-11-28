@@ -30,7 +30,14 @@ void opcontrol() {
     pros::Distance distance_sensor(3);
 
     bool claw_extended = false;
+    // Autograb is always on in driver control: the claw closes by itself when
+    // the sensor sees a piece in it. After a release it re-arms only once the
+    // sensor has seen nothing closer than AUTOGRAB_CLEAR_MM for
+    // AUTOGRAB_REARM_MS (the piece has left), so it doesn't grab the same piece again.
+    const int AUTOGRAB_MM = 51, AUTOGRAB_CLEAR_MM = 90, AUTOGRAB_REARM_MS = 250;
     bool autograb_armed = false;
+    bool claw_clear = false;
+    std::uint32_t clear_since = 0;
 
     // pistons starting variables
     claw.set_value(claw_extended);
@@ -43,42 +50,53 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift: R2 up, R1 down.
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+        // 2. Cascade: L1 up, L2 down, while held.
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
             liftManual(127);
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
             liftManual(-127);
         } else {
             liftManual(0);
         }
 
-        // 3. A: manual toggle of the claw. While the controller menu is open
-        // (X), A is the menu's + button instead.
+        // 3. B: let go of the pin or cup. Closing is automatic (step 4).
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+            claw_extended = false;
+            autograb_armed = false;  // the piece just let go of is still in front of the sensor
+            claw.set_value(claw_extended);
+        }
+
+        // 3b. A: open/close the claw by hand, for when the sensor misses a
+        // piece. While the controller menu is open (X), A is the menu's +
+        // button instead.
         if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             claw_extended = !claw_extended;
+            if (!claw_extended) autograb_armed = false;
             claw.set_value(claw_extended);
         }
 
-        // 4. L1: arm/disarm the sensor + autograb
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-            autograb_armed = !autograb_armed;
-        }
-
-        // 5. L2: let go of the pin
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
-            claw_extended = false;
-            claw.set_value(claw_extended);
-        }
-
-        // 6. Autograb: only runs while armed, grabs once, then disarms itself
-        if (autograb_armed) {
-            int32_t d = distance_sensor.get();
-            if (d > 0 && d < 51) {
-                claw_extended = true;
-                claw.set_value(claw_extended);
-                autograb_armed = false;
+        // 4. Autograb. An unplugged sensor reads PROS_ERR (huge): it arms, and never grabs.
+        int32_t d = distance_sensor.get();
+        if (!autograb_armed && !claw_extended) {
+            if (d <= AUTOGRAB_CLEAR_MM) {
+                claw_clear = false;
+            } else if (!claw_clear) {
+                claw_clear = true;
+                clear_since = pros::millis();
+            } else if (pros::millis() - clear_since >= static_cast<std::uint32_t>(AUTOGRAB_REARM_MS)) {
+                autograb_armed = true;
             }
+        } else {
+            claw_clear = false;
         }
+        if (autograb_armed && d > 0 && d < AUTOGRAB_MM) {
+            claw_extended = true;
+            claw.set_value(claw_extended);
+            autograb_armed = false;
+        }
+
+        // R1 and R2 are kept free for the toggle flapper (flip to our colour /
+        // turn by hand); that code is not on this branch yet.
 
         pros::delay(10);  // inside da loop
     }
