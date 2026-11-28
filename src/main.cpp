@@ -58,17 +58,12 @@ void opcontrol() {
             liftManual(0);
         }
 
-        // 3. B: let go of the pin or cup. Closing is automatic: the claw task
-        // (src/sub/claw.cpp) shuts it when the distance sensor sees a piece in
-        // place, and after a release waits for the claw to be empty first.
+        // 3. B: the claw, by hand. Closed: opens it (lets go). Open: closes it.
+        // Closing is usually automatic: the claw task (src/sub/claw.cpp) shuts
+        // it when the distance sensor sees a piece in place, and after a
+        // release waits for the claw to be empty first. B is for when the
+        // sensor misses a piece. (A is only the controller menu's + button.)
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
-            clawRelease();
-        }
-
-        // 3b. A: open/close the claw by hand, for when the sensor misses a
-        // piece. While the controller menu is open (X), A is the menu's +
-        // button instead.
-        if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             clawToggle();
         }
 
