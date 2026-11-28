@@ -19,7 +19,7 @@ static constexpr std::uint32_t SPLASH_MS = 1200;
 static constexpr std::uint32_t MENU_TIMEOUT_MS = 5000;
 
 // The only buttons the menu touches. Everything else is free for mechanisms.
-// A is also the claw button; see handleButtons() for how they share it.
+// The driver loop uses none of these (the claw is on B).
 static constexpr auto BTN_MENU  = pros::E_CONTROLLER_DIGITAL_X;
 static constexpr auto BTN_NEXT  = pros::E_CONTROLLER_DIGITAL_UP;
 static constexpr auto BTN_PLUS  = pros::E_CONTROLLER_DIGITAL_A;

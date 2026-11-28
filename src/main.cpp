@@ -61,19 +61,12 @@ void opcontrol() {
             liftManual(0);
         }
 
-        // 3. B: let go of the pin or cup. Closing is automatic (step 4).
+        // 3. B: the claw, by hand. Closed: opens it (lets go). Open: closes it.
+        // Closing is usually automatic (step 4); B is for when the sensor
+        // misses a piece. (A is only the controller menu's + button.)
         if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
-            claw_extended = false;
-            autograb_armed = false;  // the piece just let go of is still in front of the sensor
-            claw.set_value(claw_extended);
-        }
-
-        // 3b. A: open/close the claw by hand, for when the sensor misses a
-        // piece. While the controller menu is open (X), A is the menu's +
-        // button instead.
-        if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             claw_extended = !claw_extended;
-            if (!claw_extended) autograb_armed = false;
+            if (!claw_extended) autograb_armed = false;  // the piece just let go of is still in front of the sensor
             claw.set_value(claw_extended);
         }
 
