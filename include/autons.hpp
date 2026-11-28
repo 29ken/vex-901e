@@ -12,6 +12,9 @@ extern int selectedAuton;  // changed by the brain screen selector
 // Runs whichever auton is selected. Called from autonomous(). The routes and
 // the list are in src/auton/routes.cpp (src/auton/auton.hpp says what is where).
 void runAuton();
+// Our alliance, from the picked auton: blue for the "Blue ..." ones, red for
+// everything else (Skills too). Driver control uses it for the toggle (R1).
+bool blueAlliance();
 
 #ifdef RW_SIM_PROS
 // Simulator only (sh sim/run-sim.sh builds with RW_SIM_PROS). The simulator

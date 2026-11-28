@@ -15,6 +15,7 @@ static pros::Distance sensor(AUTOGRAB_SENSOR);
 static pros::Mutex mutex;
 static bool closed = false;
 static std::atomic<bool> armed{false};
+static std::atomic<bool> autoArm{false};  // autograbAuto()
 static std::atomic<std::uint32_t> grabs{0};  // autograb closings, for clawGrabWhenSeen()
 // The odometry trigger of autograbArmNear(): off while nearRadius is 0.
 static std::atomic<double> nearX{0}, nearY{0}, nearRadius{0};
@@ -30,7 +31,24 @@ static void setClaw(bool close) {
 }
 
 static void loop() {
+    std::uint32_t clearSince = 0;
+    bool clear = false;
     while (true) {
+        // Driver control: once the claw is open and empty, autograb arms itself.
+        if (autoArm && !armed && !clawClosed()) {
+            std::uint32_t now = pros::millis();
+            // An unplugged sensor reads PROS_ERR (huge): it arms, and never grabs.
+            if (sensor.get() <= AUTOGRAB_CLEAR_MM) {
+                clear = false;
+            } else if (!clear) {
+                clear = true;
+                clearSince = now;
+            } else if (now - clearSince >= static_cast<std::uint32_t>(AUTOGRAB_REARM_MS)) {
+                autograbArm(true);
+            }
+        } else {
+            clear = false;
+        }
         if (armed) {
             std::int32_t mm = sensor.get();  // PROS_ERR (huge) when unplugged, so it never grabs
             bool seen = mm > 0 && mm < AUTOGRAB_MM;
@@ -61,17 +79,28 @@ void initClaw() {
 }
 
 void clawGrab() { setClaw(true); }
-void clawRelease() { setClaw(false); }
+// Disarms too: the piece just let go of is still in front of the sensor.
+void clawRelease() {
+    armed = false;
+    setClaw(false);
+}
 
 void clawToggle() {
-    std::lock_guard<pros::Mutex> hold(mutex);
-    closed = !closed;
-    piston.set_value(closed);
+    if (clawClosed()) {
+        clawRelease();
+    } else {
+        clawGrab();
+    }
 }
 
 bool clawClosed() {
     std::lock_guard<pros::Mutex> hold(mutex);
     return closed;
+}
+
+void autograbAuto(bool on) {
+    autoArm = on;
+    if (!on) armed = false;
 }
 
 void autograbArm(bool on) {

@@ -8,8 +8,13 @@
 // Claw piston (3-wire port letter) and the autograb distance sensor under it.
 inline constexpr char CLAW_PORT = 'B';
 inline constexpr std::int8_t AUTOGRAB_SENSOR = 3;
-// Armed autograb closes the claw once something is closer than this (mm).
+// Autograb closes the claw once something is closer than this (mm).
 inline constexpr int AUTOGRAB_MM = 51;
+// In driver control autograb is always on. After B lets go, it waits until the
+// sensor has seen nothing closer than AUTOGRAB_CLEAR_MM for AUTOGRAB_REARM_MS
+// (the piece is out of the claw), so it doesn't grab the same piece again.
+inline constexpr int AUTOGRAB_CLEAR_MM = 90;
+inline constexpr int AUTOGRAB_REARM_MS = 250;
 
 // Cascade lift. If the two sides fight each other, flip the sign on one.
 inline constexpr std::int8_t LIFT_LEFT  = -17;
@@ -29,8 +34,8 @@ inline constexpr std::int8_t TOGGLE_SENSOR = 0;
 inline constexpr std::int8_t TOGGLE_OPTICAL = 0;
 
 // liftNextPreset() steps up through these heights, lowest first, in sensor
-// degrees above the bottom. It isn't on a button yet (L1 arms autograb). To
-// find one: raise the lift with R2 until it lines up with the pin or cone,
+// degrees above the bottom. It isn't on a button yet. To find one: raise the
+// lift with L1 until it lines up with the pin or cone,
 // then read "Lift" on the brain screen. The V4 winch is direct drive, so
 // heights measured on the early-season robot don't carry over.
 inline constexpr double LIFT_PRESETS[] = {300, 600, 900};  // TODO: measure

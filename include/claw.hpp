@@ -15,6 +15,12 @@ bool clawClosed();
 // AUTOGRAB_MM to the sensor, then disarms itself.
 void autograbArm(bool armed);
 bool autograbArmed();
+// Driver control: autograb arms itself whenever the claw is open and the
+// sensor has seen nothing in it for a moment (AUTOGRAB_CLEAR_MM and
+// AUTOGRAB_REARM_MS in config.hpp), so the claw closes on each new piece with
+// no button. Turning it off also disarms. Autons run with it off and arm
+// autograb themselves.
+void autograbAuto(bool on);
 
 // For grabbing on the move: arms autograb, and also closes the claw once the
 // robot's centre (RW's odometry) is within radius_in of (x, y) in field

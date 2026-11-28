@@ -11,7 +11,7 @@ extern pros::MotorGroup lift;
 // height 0. Call once from initialize(), with the lift all the way down.
 void initLift();
 
-// Hand control from R1/R2, + is up. Anything but 0 cancels a preset move.
+// Hand control from L1/L2, + is up. Anything but 0 cancels a preset move.
 void liftManual(int power);
 // Goes to the next preset height above where the lift is, or is already headed.
 void liftNextPreset();

@@ -13,6 +13,7 @@ static pros::Optical* optical = nullptr;
 
 static std::atomic<bool> flipping{false};
 static pros::Mutex flipMutex;  // one flip at a time
+static std::atomic<bool> byHand{false};  // R2 is turning the flapper (toggleManual())
 
 void initToggle() {
 #ifndef RW_SIM_PROS
@@ -144,8 +145,19 @@ static void asyncFlip(void*) {
     setToggle(asyncBlue);
 }
 
+void toggleManual(bool held) {
+    if (!motor || flipping) return;
+    if (held) {
+        byHand = true;
+        motor->move(-TOGGLE_FLIP_POWER);
+    } else if (byHand) {
+        motor->move(0);  // coasts, like the rest of the time: the lift drags it when it lowers
+        byHand = false;
+    }
+}
+
 void setToggleAsync(bool blueAlliance) {
-    if (flipping) return;
+    if (flipping || byHand) return;
     asyncBlue = blueAlliance;
     pros::Task task(asyncFlip, nullptr, "Toggle flip");
 }
@@ -162,7 +174,7 @@ void parkToggle() {
 }
 
 void ratchetWithLift(int liftPower) {
-    if (!motor || flipping) return;
+    if (!motor || flipping || byHand) return;
     // Coasting at 0 lets the lift drag the axle when it lowers.
     motor->move(RATCHET_ASSIST && liftPower > 0 ? liftPower : 0);
 }

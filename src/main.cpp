@@ -8,7 +8,6 @@
 #include "claw.hpp"
 #include "watch.hpp"
 #include "toggle.hpp"
-#include <cstring>
 
 void initialize() {
     initDrive();
@@ -28,6 +27,7 @@ void disabled() {}
 void competition_initialize() {}
 
 void autonomous() {
+    autograbAuto(false);  // autons arm autograb themselves
     runAuton();
 }
 
@@ -38,8 +38,8 @@ void opcontrol() {
     pros::Controller master(pros::E_CONTROLLER_MASTER);
 
     // The claw keeps whatever auton left it holding (it starts open at power-on).
-    // An autograb armed during auton doesn't carry over.
-    autograbArm(false);
+    // From here on it closes by itself whenever a piece sits in it.
+    autograbAuto(true);
 
     applyDriverBrakes();
 
@@ -49,36 +49,34 @@ void opcontrol() {
             driveControl();
         }
 
-        // 2. Lift: R2 up, R1 down.
-        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+        // 2. Cascade: L1 up, L2 down, while held.
+        if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
             liftManual(127);
-        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+        } else if (master.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
             liftManual(-127);
         } else {
             liftManual(0);
         }
 
-        // 3. A: manual toggle of the claw. While the controller menu is open
-        // (X), A is the menu's + button instead.
+        // 3. B: let go of the pin or cup. Closing is automatic: the claw task
+        // (src/sub/claw.cpp) shuts it when the distance sensor sees a piece in
+        // place, and after a release waits for the claw to be empty first.
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
+            clawRelease();
+        }
+
+        // 3b. A: open/close the claw by hand, for when the sensor misses a
+        // piece. While the controller menu is open (X), A is the menu's +
+        // button instead.
         if (!controllerMenuOpen() && master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A)) {
             clawToggle();
         }
 
-        // 4. L1: arm/disarm autograb. The claw task (src/sub/claw.cpp) watches
-        // the sensor and grabs once, then disarms itself.
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
-            autograbArm(!autograbArmed());
-        }
-
-        // 5. L2: let go of the pin
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L2)) {
-            clawRelease();
-        }
-
-        // 6. B: flip the toggle next to the flapper to our colour. Our colour is
-        // the selected auton's ("Blue ..." = blue, anything else = red).
-        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B)) {
-            setToggleAsync(std::strncmp(autons[selectedAuton].name, "Blue", 4) == 0);
+        // 4. Toggle (include/toggle.hpp). R1, one press: flip the toggle next
+        // to the flapper to our colour. R2, held: turn the flapper by hand.
+        toggleManual(master.get_digital(pros::E_CONTROLLER_DIGITAL_R2));
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+            setToggleAsync(blueAlliance());
         }
 
         pros::delay(10);  // inside da loop

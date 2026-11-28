@@ -39,6 +39,10 @@ bool setToggle(bool blueAlliance);
 // The same, without waiting (for the driver's button). Does nothing if a flip
 // is already going.
 void setToggleAsync(bool blueAlliance);
+// R2, called every loop with whether it is held: turns the flapper (the same
+// way a flip does, so the lift doesn't move) for as long as it is. Ignored
+// while an automatic flip is running.
+void toggleManual(bool held);
 // Turns the flapper (the flip direction) to its next rest angle. Lowering the
 // lift drags the flapper round, so call this if the flaps are left in the way.
 void parkToggle();

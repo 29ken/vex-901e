@@ -47,7 +47,7 @@ static void loop() {
         int power;
         {
             std::lock_guard<pros::Mutex> hold(mutex);
-            // R1/R2 held at the buzzer doesn't carry into the next period. Preset
+            // L1/L2 held at the buzzer doesn't carry into the next period. Preset
             // moves still wait out the disable.
             if (disabled) control.manual(0);
             if (ok) {

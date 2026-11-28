@@ -47,7 +47,7 @@ runs to be off, and tune from there.
       should stay still (pawls clicking). Lower it by hand: the flapper should
       turn. If it is the other way round, the pawls are on backwards for the
       code.
-- [ ] **Ratchet check, robot on:** tap B. The flapper should turn half a turn
+- [ ] **Ratchet check, robot on:** tap R1. The flapper should turn half a turn
       and the lift should NOT move. If the lift moves, make `RATCHET_MOTOR`
       negative.
 - [ ] Turn the flapper by hand to where the flaps are clear of everything, read
@@ -123,7 +123,7 @@ How the pieces fit together (and where the robot's weight comes in):
 
 ## 3. Lift and claw (20 min)
 
-- [ ] **Lift heights**: raise by hand with R2, read "Lift" on the brain screen.
+- [ ] **Lift heights**: raise by hand with L1, read "Lift" on the brain screen.
       Paste into `include/config.hpp`:
       - `LIFT_GRAB`, `LIFT_CARRY`
       - `LIFT_ALLIANCE_GOAL`: claw over an empty red goal
@@ -211,7 +211,7 @@ Brain screen, middle button = Distance page.
       `src/auton/moves.cpp` to that angle, run Red Left 4, and note
       where the robot is after each wall stack (the routes after the grab were
       tuned for a square robot and will need adjusting).
-- [ ] How long does a real toggle flip take (B on the controller, time it)?
+- [ ] How long does a real toggle flip take (R1 on the controller, time it)?
       Paste into `TOGGLE_FLIP_MS` in `include/toggle.hpp` (600 is a guess; the
       simulator uses it). The solo AWP route needs this.
 
