@@ -5,10 +5,12 @@
 #include "lift.hpp"
 #include "tuner.hpp"
 #include "screens.hpp"
+#include "toggle.hpp"
 
 void initialize() {
     initDrive();
     initLift();
+    initToggle();
     startBrainScreen();
     startControllerScreen();
 }
@@ -95,8 +97,12 @@ void opcontrol() {
             autograb_armed = false;
         }
 
-        // R1 and R2 are kept free for the toggle flapper (flip to our colour /
-        // turn by hand); that code is not on this branch yet.
+        // 5. Toggle (include/toggle.hpp). R1, one press: flip the toggle next
+        // to the flapper to our colour. R2, held: turn the flapper by hand.
+        toggleManual(master.get_digital(pros::E_CONTROLLER_DIGITAL_R2));
+        if (master.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1)) {
+            setToggleAsync(blueAlliance());
+        }
 
         pros::delay(10);  // inside da loop
     }

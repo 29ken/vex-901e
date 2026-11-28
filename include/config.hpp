@@ -14,6 +14,14 @@ inline constexpr std::int8_t LIFT_RIGHT = 16;
 // brain screen go up; if it goes down, make this -4.
 inline constexpr std::int8_t LIFT_SENSOR = 4;
 
+// Ratchet motor (drives the toggle flapper, and the winch one way: see
+// toggle.hpp), the rotation sensor on the toggle shaft, and the optical sensor
+// that looks at the field toggle. 0 = not plugged in yet: R1 and R2 then do
+// nothing. If R2 moves the lift instead of the flapper, make RATCHET_MOTOR negative.
+inline constexpr std::int8_t RATCHET_MOTOR = 0;
+inline constexpr std::int8_t TOGGLE_SENSOR = 0;
+inline constexpr std::int8_t TOGGLE_OPTICAL = 0;
+
 // Preset lift heights, lowest first (not on a button yet), in sensor degrees above
 // the bottom. To find one: raise the lift with L1 until it lines up with the
 // pin or cone, then read "Lift" on the brain screen.

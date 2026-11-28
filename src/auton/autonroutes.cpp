@@ -10,6 +10,7 @@
 //   boomerang(x, y, dir, heading, dlead, timeout_ms)
 
 #include "autons.hpp"
+#include <cstring>
 #include "drivetrain.hpp"
 
 static void none() {}
@@ -146,6 +147,10 @@ const Auton autons[] = {
 };
 const int autonCount = sizeof(autons) / sizeof(autons[0]);
 int selectedAuton = 0;
+
+bool blueAlliance() {
+    return std::strncmp(autons[selectedAuton].name, "Blue", 4) == 0;
+}
 
 void runAuton() {
     // Hold so the robot stops dead at the end of each move instead of rolling on.
