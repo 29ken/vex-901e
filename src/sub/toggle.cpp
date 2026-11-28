@@ -148,6 +148,37 @@ static void asyncFlip(void*) {
     setToggle(asyncBlue);
 }
 
+// R1 (toggleHold()): held, and the task that watches the toggle while it is.
+static std::atomic<bool> holdHeld{false};
+static std::atomic<bool> holdRunning{false};
+static bool holdBlue = false;
+static void holdTask(void*) {
+    ToggleColor ours = holdBlue ? ToggleColor::Blue : ToggleColor::Red;
+    setToggle(holdBlue);  // the press itself: look, and flip if it isn't ours
+    int wrong = 0;
+    while (holdHeld) {
+        // Still held: keep looking. Only a colour it can clearly see, and that
+        // isn't ours, counts (a toggle it can't read is left alone), and only
+        // after a few readings in a row, so one bad reading doesn't flip it.
+        ToggleColor seen = toggleColor();
+        wrong = (seen != ToggleColor::Unknown && seen != ours) ? wrong + 1 : 0;
+        if (wrong >= TOGGLE_HOLD_READS && !byHand) {
+            setToggle(holdBlue);
+            wrong = 0;
+        }
+        pros::delay(TOGGLE_HOLD_MS);
+    }
+    holdRunning = false;
+}
+
+void toggleHold(bool held, bool blueAlliance) {
+    holdHeld = held;
+    if (!held || holdRunning || flipping || byHand) return;
+    holdRunning = true;
+    holdBlue = blueAlliance;
+    pros::Task task(holdTask, nullptr, "Toggle hold");
+}
+
 void toggleManual(bool held) {
     if (!motor || flipping) return;
     if (held) {
